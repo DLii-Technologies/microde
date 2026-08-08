@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Microservice, MicroserviceState } from '@microde/microservice';
 
@@ -10,7 +10,7 @@ import { FailingExecutionModule } from './fixtures/failing-execution-module.js';
 import { FailingSynchronousExecutionModule } from './fixtures/failing-synchronous-execution-module.js';
 import { FailingLifecycleModule } from './fixtures/failing-lifecycle-module.js';
 
-describe('Microservice', () => {
+describe('Microservice Execution', () => {
 	it('runs to successful completion when no modules are installed', async () => {
 		const microservice = new Microservice();
 
@@ -197,8 +197,8 @@ describe('Microservice', () => {
 			'second:setup',
 			'first:run',
 			'second:run',
-			'first:stop',
 			'second:stop',
+			'first:stop',
 			'second:teardown',
 			'first:teardown',
 			'second:shutdown',
@@ -458,6 +458,7 @@ describe('Microservice', () => {
 		await expect(microservice.run()).resolves.toEqual({
 			exitCode: 1,
 			error: secondFailure,
+			errors: [secondFailure, firstFailure],
 		});
 		expect(events).toContain('second:teardown');
 		expect(events).toContain('first:teardown');
@@ -555,6 +556,7 @@ describe('Microservice', () => {
 		await expect(microservice.run()).resolves.toEqual({
 			exitCode: 1,
 			error: primaryFailure,
+			errors: [primaryFailure, teardownFailure],
 		});
 	});
 
@@ -721,5 +723,349 @@ describe('Microservice', () => {
 		});
 		expect(events).toContain('first:stop');
 		expect(events).toContain('second:stop');
+	});
+});
+
+describe('Microservice Stopping', () => {
+	it('rejects stopping before the microservice has started', () => {
+		const microservice = new Microservice();
+
+		expect(() => microservice.stop()).toThrow(
+			'Cannot stop microservice before it has started. Current state: Idle',
+		);
+	});
+
+	it('returns the execution promise and handles repeated stop requests once', async () => {
+		const events: string[] = [];
+		let releaseRun!: () => void;
+		const runCompletion = new Promise<void>((resolve) => {
+			releaseRun = resolve;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				events,
+				'active',
+				runCompletion,
+				() => {},
+				releaseRun,
+			);
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() => expect(events).toContain('active:run'));
+
+		const firstStop = microservice.stop();
+		const secondStop = microservice.stop();
+
+		expect(firstStop).toBe(execution);
+		expect(secondStop).toBe(execution);
+		await expect(execution).resolves.toEqual({ exitCode: 0 });
+		expect(events.filter((event) => event === 'active:stop')).toHaveLength(
+			1,
+		);
+	});
+
+	it('finishes the current initialization and skips remaining forward work', async () => {
+		const events: string[] = [];
+		let releaseInitialization!: () => void;
+		const initializationCompletion = new Promise<void>((resolve) => {
+			releaseInitialization = resolve;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new (class extends PassiveModule {
+				override async initialize(): Promise<void> {
+					this.record('initialize');
+					await initializationCompletion;
+				}
+			})(instance, events, 'first');
+		});
+		microservice.install((instance) => {
+			return new PassiveModule(instance, events, 'second');
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() => expect(events).toContain('first:initialize'));
+		const stopping = microservice.stop();
+		releaseInitialization();
+
+		await expect(stopping).resolves.toEqual({ exitCode: 0 });
+		expect(stopping).toBe(execution);
+		expect(events).toEqual([
+			'first:initialize',
+			'first:shutdown',
+			'second:cleanup',
+			'first:cleanup',
+		]);
+	});
+
+	it('finishes the current setup and skips remaining setup and execution', async () => {
+		const events: string[] = [];
+		let releaseSetup!: () => void;
+		const setupCompletion = new Promise<void>((resolve) => {
+			releaseSetup = resolve;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new (class extends PassiveModule {
+				override async setup(): Promise<void> {
+					this.record('setup');
+					await setupCompletion;
+				}
+			})(instance, events, 'first');
+		});
+		microservice.install((instance) => {
+			return new PassiveModule(instance, events, 'second');
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() => expect(events).toContain('first:setup'));
+		const stopping = microservice.stop();
+		releaseSetup();
+
+		await expect(stopping).resolves.toEqual({ exitCode: 0 });
+		expect(stopping).toBe(execution);
+		expect(events).toEqual([
+			'first:initialize',
+			'second:initialize',
+			'first:setup',
+			'first:teardown',
+			'second:shutdown',
+			'first:shutdown',
+			'second:cleanup',
+			'first:cleanup',
+		]);
+	});
+
+	it('invokes active module stops immediately in reverse installation order', async () => {
+		const events: string[] = [];
+		let releaseFirstRun!: () => void;
+		let releaseSecondRun!: () => void;
+		let releaseSecondStop!: () => void;
+		const firstRun = new Promise<void>((resolve) => {
+			releaseFirstRun = resolve;
+		});
+		const secondRun = new Promise<void>((resolve) => {
+			releaseSecondRun = resolve;
+		});
+		const secondStop = new Promise<void>((resolve) => {
+			releaseSecondStop = resolve;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				events,
+				'first',
+				firstRun,
+				() => {},
+				releaseFirstRun,
+			);
+		});
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				events,
+				'second',
+				secondRun,
+				() => {},
+				releaseSecondRun,
+				secondStop,
+			);
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() => expect(events).toContain('second:run'));
+		microservice.stop();
+		await vi.waitFor(() => expect(events).toContain('first:stop'));
+
+		expect(events.indexOf('second:stop')).toBeLessThan(
+			events.indexOf('first:stop'),
+		);
+		expect(events).not.toContain('second:teardown');
+
+		releaseSecondStop();
+		await expect(execution).resolves.toEqual({ exitCode: 0 });
+	});
+
+	it('waits for stop operations before draining pending runs', async () => {
+		const events: string[] = [];
+		let releaseRun!: () => void;
+		let releaseStop!: () => void;
+		const runCompletion = new Promise<void>((resolve) => {
+			releaseRun = resolve;
+		});
+		const stopCompletion = new Promise<void>((resolve) => {
+			releaseStop = resolve;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				events,
+				'active',
+				runCompletion,
+				() => {},
+				() => {},
+				stopCompletion,
+				() => events.push('active:run-complete'),
+			);
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() => expect(events).toContain('active:run'));
+		microservice.stop();
+		await vi.waitFor(() => expect(events).toContain('active:stop'));
+		releaseRun();
+		await vi.waitFor(() => expect(events).toContain('active:run-complete'));
+
+		expect(events).not.toContain('active:teardown');
+		releaseStop();
+		await execution;
+		expect(events.indexOf('active:run-complete')).toBeLessThan(
+			events.indexOf('active:teardown'),
+		);
+	});
+
+	it('times out each module stop independently and continues shutdown', async () => {
+		vi.useFakeTimers();
+		try {
+			const events: string[] = [];
+			const stopNeverCompletes = new Promise<void>(() => {});
+			const microservice = new Microservice({ stopTimeout: 100 });
+
+			microservice.install((instance) => {
+				return new ActiveModule(
+					instance,
+					events,
+					'active',
+					Promise.resolve(),
+					() => {},
+					() => {},
+					stopNeverCompletes,
+				);
+			});
+
+			const execution = microservice.run();
+			await vi.advanceTimersByTimeAsync(100);
+			const result = await execution;
+
+			expect(result.exitCode).toBe(1);
+			expect(result.error).toBeInstanceOf(Error);
+			expect((result.error as Error).message).toMatch(/stop.*timed out/i);
+			expect(events).toContain('active:teardown');
+			expect(events).toContain('active:shutdown');
+			expect(events).toContain('active:cleanup');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('prioritizes a stop error over an execution error and retains both', async () => {
+		const executionFailure = new Error('execution failed');
+		const stopFailure = new Error('stop failed');
+		let rejectRun!: (reason: unknown) => void;
+		const runCompletion = new Promise<void>((_resolve, reject) => {
+			rejectRun = reject;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				[],
+				'active',
+				runCompletion,
+				() => {},
+				() => {
+					rejectRun(executionFailure);
+					throw stopFailure;
+				},
+			);
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() =>
+			expect(microservice.state).toBe(MicroserviceState.Running),
+		);
+		microservice.stop();
+		const result = await execution;
+
+		expect(result).toMatchObject({
+			exitCode: 1,
+			error: stopFailure,
+		});
+		expect(result.errors).toEqual([stopFailure, executionFailure]);
+	});
+
+	it('keeps multiple stop errors in deterministic reverse module order', async () => {
+		const firstFailure = new Error('first stop failed');
+		const secondFailure = new Error('second stop failed');
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				[],
+				'first',
+				Promise.resolve(),
+				() => {},
+				() => {
+					throw firstFailure;
+				},
+			);
+		});
+		microservice.install((instance) => {
+			return new ActiveModule(
+				instance,
+				[],
+				'second',
+				Promise.resolve(),
+				() => {},
+				() => {
+					throw secondFailure;
+				},
+			);
+		});
+
+		const result = await microservice.run();
+
+		expect(result.error).toBe(secondFailure);
+		expect(result.errors).toEqual([secondFailure, firstFailure]);
+	});
+
+	it('joins shutdown when stop is called after execution has ended', async () => {
+		const events: string[] = [];
+		let releaseShutdown!: () => void;
+		const shutdownCompletion = new Promise<void>((resolve) => {
+			releaseShutdown = resolve;
+		});
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new (class extends PassiveModule {
+				override async shutdown(): Promise<void> {
+					this.record('shutdown');
+					await shutdownCompletion;
+				}
+			})(instance, events, 'passive');
+		});
+
+		const execution = microservice.run();
+		await vi.waitFor(() =>
+			expect(microservice.state).toBe(MicroserviceState.Shutdown),
+		);
+		const stopping = microservice.stop();
+
+		expect(stopping).toBe(execution);
+		releaseShutdown();
+		await expect(stopping).resolves.toEqual({ exitCode: 0 });
 	});
 });
