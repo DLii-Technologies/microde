@@ -1,7 +1,9 @@
 {
 	"name": "microde",
 	"version": "0.0.1",
-	"description": "",
+	"description": "The Microde framework for building composable microservices.",
+	"license": "MIT",
+	"author": "DLii Technologies",
 	"type": "module",
 	"private": true,
 	"scripts": {
@@ -12,9 +14,6 @@
 		"test:coverage": "vitest run --passWithNoTests --coverage",
 		"typecheck": "pnpm -r typecheck"
 	},
-	"keywords": [],
-	"author": "",
-	"license": "MIT",
 	"devEngines": {
 		"packageManager": {
 			"name": "pnpm",
