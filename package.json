@@ -6,22 +6,21 @@
 	"author": "DLii Technologies",
 	"type": "module",
 	"private": true,
+	"packageManager": "pnpm@11.20.0",
 	"scripts": {
 		"build": "pnpm -r build",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
-		"test": "vitest run --passWithNoTests",
-		"test:coverage": "vitest run --passWithNoTests --coverage",
-		"typecheck": "pnpm -r typecheck"
-	},
-	"devEngines": {
-		"packageManager": {
-			"name": "pnpm",
-			"version": "^11.17.0",
-			"onFail": "download"
-		}
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"test:watch": "vitest",
+		"typecheck": "pnpm -r typecheck",
+		"changeset": "changeset",
+		"version": "changeset version",
+		"release": "changeset publish"
 	},
 	"devDependencies": {
+		"@changesets/cli": "^2.31.1",
 		"@types/node": "^26.1.2",
 		"@vitest/coverage-v8": "^4.1.10",
 		"prettier": "^3.9.6",
