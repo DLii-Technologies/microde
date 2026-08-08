@@ -10,7 +10,7 @@
 		"format:check": "prettier --check .",
 		"test": "vitest run --passWithNoTests",
 		"test:coverage": "vitest run --passWithNoTests --coverage",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "pnpm -r typecheck"
 	},
 	"keywords": [],
 	"author": "",

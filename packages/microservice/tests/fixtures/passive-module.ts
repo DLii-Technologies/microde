@@ -1,6 +1,6 @@
-import { Microservice, MicroserviceModule } from '@microde/microservice';
+import { Microservice, PassiveMicroserviceModule } from '@microde/microservice';
 
-export class PassiveModule extends MicroserviceModule {
+export class PassiveModule extends PassiveMicroserviceModule {
 	constructor(
 		microservice: Microservice,
 		protected readonly events: string[],
@@ -21,9 +21,8 @@ export class PassiveModule extends MicroserviceModule {
 		this.record('setup');
 	}
 
-	run(): Promise<void> | undefined {
+	async run(): Promise<void> {
 		this.record('run');
-		return undefined;
 	}
 
 	async teardown(): Promise<void> {
