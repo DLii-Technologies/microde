@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --passWithNoTests --coverage",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

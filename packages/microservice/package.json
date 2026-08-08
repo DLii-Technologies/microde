@@ -1,0 +1,13 @@
+{
+  "name": "@microde/microservice",
+  "version": "0.0.1",
+  "description": "Composition and lifecycle driver for long-running microservices.",
+  "type": "module",
+  "module": "./dist/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  }
+}
