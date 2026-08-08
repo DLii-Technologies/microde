@@ -821,6 +821,56 @@ describe('Microservice Stopping', () => {
 		);
 	});
 
+	it('stops with an explicit exit code', async () => {
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		const execution = microservice.run();
+		await expect(microservice.stop(42)).resolves.toEqual({ exitCode: 42 });
+		await expect(execution).resolves.toEqual({ exitCode: 42 });
+		expect(microservice.state).toBe(MicroserviceState.Failed);
+	});
+
+	it('stops with an explicit error', async () => {
+		const failure = new Error('stop requested');
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		void microservice.run();
+		await expect(microservice.stop(failure)).resolves.toEqual({
+			exitCode: 1,
+			error: failure,
+		});
+	});
+
+	it('stops with an explicit exit code and error', async () => {
+		const failure = new Error('restart requested');
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		void microservice.run();
+		await expect(microservice.stop(75, failure)).resolves.toEqual({
+			exitCode: 75,
+			error: failure,
+		});
+	});
+
+	it('uses the values from the first repeated stop request', async () => {
+		const firstFailure = new Error('first request');
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		void microservice.run();
+		const firstStop = microservice.stop(2, firstFailure);
+		const secondStop = microservice.stop(3, new Error('second request'));
+
+		expect(secondStop).toBe(firstStop);
+		await expect(firstStop).resolves.toEqual({
+			exitCode: 2,
+			error: firstFailure,
+		});
+	});
+
 	it('finishes the current initialization and skips remaining forward work', async () => {
 		const events: string[] = [];
 		let releaseInitialization!: () => void;

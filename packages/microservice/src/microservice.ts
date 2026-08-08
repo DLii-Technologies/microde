@@ -39,6 +39,7 @@ enum ErrorPriority {
 	Lifecycle,
 	Execution,
 	Stop,
+	StopRequest,
 }
 
 interface RecordedError {
@@ -73,6 +74,8 @@ export class Microservice {
 	private currentState = MicroserviceState.Idle;
 	private execution?: Promise<MicroserviceExecutionResult>;
 	private stopRequested = false;
+	private stopExitCode?: number;
+	private stopError?: unknown;
 
 	constructor() {
 		this.stopRequest = new Promise<void>((resolve) => {
@@ -128,7 +131,17 @@ export class Microservice {
 		return this.execution;
 	}
 
-	stop(): Promise<MicroserviceExecutionResult> {
+	stop(): Promise<MicroserviceExecutionResult>;
+	stop(exitCode: number): Promise<MicroserviceExecutionResult>;
+	stop(error: unknown): Promise<MicroserviceExecutionResult>;
+	stop(
+		exitCode: number,
+		error: unknown,
+	): Promise<MicroserviceExecutionResult>;
+	stop(
+		exitCodeOrError?: number | unknown,
+		error?: unknown,
+	): Promise<MicroserviceExecutionResult> {
 		if (
 			this.currentState === MicroserviceState.Idle ||
 			this.currentState === MicroserviceState.Installing
@@ -140,6 +153,12 @@ export class Microservice {
 
 		if (!this.stopRequested) {
 			this.stopRequested = true;
+			if (typeof exitCodeOrError === 'number') {
+				this.stopExitCode = exitCodeOrError;
+				this.stopError = error;
+			} else {
+				this.stopError = exitCodeOrError;
+			}
 			this.resolveStopRequest();
 		}
 
@@ -185,13 +204,20 @@ export class Microservice {
 		this.currentState = MicroserviceState.CleanUp;
 		await this.cleanupModules(recordError);
 
-		if (recordedErrors.length > 0) {
+		if (this.stopError !== undefined) {
+			recordError(this.stopError, ErrorPriority.StopRequest);
+		}
+
+		if (
+			recordedErrors.length > 0 ||
+			(this.stopExitCode !== undefined && this.stopExitCode !== 0)
+		) {
 			this.currentState = MicroserviceState.Failed;
 		} else {
 			this.currentState = MicroserviceState.Finished;
 		}
 
-		return this.createExecutionResult(recordedErrors);
+		return this.createExecutionResult(recordedErrors, this.stopExitCode);
 	}
 
 	private async initializeModules(): Promise<void> {
@@ -290,8 +316,9 @@ export class Microservice {
 
 	private createExecutionResult(
 		recordedErrors: readonly RecordedError[],
+		exitCode?: number,
 	): MicroserviceExecutionResult {
-		if (recordedErrors.length === 0) return { exitCode: 0 };
+		if (recordedErrors.length === 0) return { exitCode: exitCode ?? 0 };
 
 		const errors = [...recordedErrors]
 			.sort((left, right) => {
@@ -303,7 +330,7 @@ export class Microservice {
 			.map(({ error }) => error);
 
 		return {
-			exitCode: 1,
+			exitCode: exitCode ?? 1,
 			error: errors[0],
 			...(errors.length > 1 ? { errors } : {}),
 		};
