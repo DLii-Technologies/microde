@@ -18,11 +18,12 @@
 	},
 	"files": [
 		"dist",
-		"README.md"
+		"README.md",
+		"LICENSE"
 	],
 	"types": "./dist/index.d.ts",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json",
+		"build": "tsc -p tsconfig.build.json && node ../../scripts/copy-license.mjs",
 		"prepack": "pnpm run build",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
