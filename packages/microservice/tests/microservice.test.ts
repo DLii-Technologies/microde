@@ -821,6 +821,56 @@ describe('Microservice Stopping', () => {
 		);
 	});
 
+	it('stops with an explicit exit code', async () => {
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		const execution = microservice.run();
+		await expect(microservice.stop(42)).resolves.toEqual({ exitCode: 42 });
+		await expect(execution).resolves.toEqual({ exitCode: 42 });
+		expect(microservice.state).toBe(MicroserviceState.Failed);
+	});
+
+	it('stops with an explicit error', async () => {
+		const failure = new Error('stop requested');
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		void microservice.run();
+		await expect(microservice.stop(failure)).resolves.toEqual({
+			exitCode: 1,
+			error: failure,
+		});
+	});
+
+	it('stops with an explicit exit code and error', async () => {
+		const failure = new Error('restart requested');
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		void microservice.run();
+		await expect(microservice.stop(75, failure)).resolves.toEqual({
+			exitCode: 75,
+			error: failure,
+		});
+	});
+
+	it('uses the values from the first repeated stop request', async () => {
+		const firstFailure = new Error('first request');
+		const microservice = new Microservice();
+		microservice.install((instance) => new ActiveModule(instance, []));
+
+		void microservice.run();
+		const firstStop = microservice.stop(2, firstFailure);
+		const secondStop = microservice.stop(3, new Error('second request'));
+
+		expect(secondStop).toBe(firstStop);
+		await expect(firstStop).resolves.toEqual({
+			exitCode: 2,
+			error: firstFailure,
+		});
+	});
+
 	it('finishes the current initialization and skips remaining forward work', async () => {
 		const events: string[] = [];
 		let releaseInitialization!: () => void;
@@ -1086,5 +1136,58 @@ describe('Microservice Stopping', () => {
 		expect(stopping).toBe(execution);
 		releaseShutdown();
 		await expect(stopping).resolves.toEqual({ exitCode: 0 });
+	});
+});
+
+describe('Microservice Panic', () => {
+	it('prints a stack trace and immediately exits with code 1', () => {
+		const exitFailure = new Error('process exited');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const trace = vi.spyOn(console, 'trace').mockImplementation(() => {});
+		const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+			throw exitFailure;
+		});
+
+		try {
+			expect(() => new Microservice().panic()).toThrow(exitFailure);
+			expect(error).not.toHaveBeenCalled();
+			expect(trace).toHaveBeenCalledOnce();
+			expect(exit).toHaveBeenCalledWith(1);
+			expect(trace.mock.invocationCallOrder[0]).toBeLessThan(
+				exit.mock.invocationCallOrder[0],
+			);
+		} finally {
+			error.mockRestore();
+			trace.mockRestore();
+			exit.mockRestore();
+		}
+	});
+
+	it('prints a supplied error before the stack trace', () => {
+		const failure = new Error('panic failure');
+		const exitFailure = new Error('process exited');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const trace = vi.spyOn(console, 'trace').mockImplementation(() => {});
+		const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+			throw exitFailure;
+		});
+
+		try {
+			expect(() => new Microservice().panic(failure)).toThrow(
+				exitFailure,
+			);
+			expect(error).toHaveBeenCalledWith(failure);
+			expect(trace).toHaveBeenCalledOnce();
+			expect(error.mock.invocationCallOrder[0]).toBeLessThan(
+				trace.mock.invocationCallOrder[0],
+			);
+			expect(trace.mock.invocationCallOrder[0]).toBeLessThan(
+				exit.mock.invocationCallOrder[0],
+			);
+		} finally {
+			error.mockRestore();
+			trace.mockRestore();
+			exit.mockRestore();
+		}
 	});
 });
