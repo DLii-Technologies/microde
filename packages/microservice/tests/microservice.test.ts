@@ -62,15 +62,6 @@ describe('Microservice Execution', () => {
 		expect(microservice.state).toBe(MicroserviceState.Idle);
 	});
 
-	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
-		'rejects an invalid stop timeout of %s',
-		(stopTimeout) => {
-			expect(() => new Microservice({ stopTimeout })).toThrow(
-				'Microservice stopTimeout must be a finite, non-negative number.',
-			);
-		},
-	);
-
 	it('rejects module installation after the microservice has started', async () => {
 		const microservice = new Microservice();
 
@@ -994,78 +985,6 @@ describe('Microservice Stopping', () => {
 		expect(events.indexOf('active:run-complete')).toBeLessThan(
 			events.indexOf('active:teardown'),
 		);
-	});
-
-	it('times out each module stop independently and continues shutdown', async () => {
-		vi.useFakeTimers();
-		try {
-			const events: string[] = [];
-			const stopNeverCompletes = new Promise<void>(() => {});
-			const microservice = new Microservice({ stopTimeout: 100 });
-
-			microservice.install((instance) => {
-				return new ActiveModule(
-					instance,
-					events,
-					'active',
-					Promise.resolve(),
-					() => {},
-					() => {},
-					stopNeverCompletes,
-				);
-			});
-
-			const execution = microservice.run();
-			await vi.advanceTimersByTimeAsync(100);
-			const result = await execution;
-
-			expect(result.exitCode).toBe(1);
-			expect(result.error).toBeInstanceOf(Error);
-			expect((result.error as Error).message).toMatch(/stop.*timed out/i);
-			expect(events).toContain('active:teardown');
-			expect(events).toContain('active:shutdown');
-			expect(events).toContain('active:cleanup');
-		} finally {
-			vi.useRealTimers();
-		}
-	});
-
-	it('continues teardown after a stop timeout when the active run never settles', async () => {
-		vi.useFakeTimers();
-		try {
-			const events: string[] = [];
-			const runNeverCompletes = new Promise<void>(() => {});
-			const stopNeverCompletes = new Promise<void>(() => {});
-			const microservice = new Microservice({ stopTimeout: 100 });
-
-			microservice.install((instance) => {
-				return new ActiveModule(
-					instance,
-					events,
-					'active',
-					runNeverCompletes,
-					() => {},
-					() => {},
-					stopNeverCompletes,
-				);
-			});
-
-			let executionSettled = false;
-			const execution = microservice.run().finally(() => {
-				executionSettled = true;
-			});
-			await vi.advanceTimersByTimeAsync(0);
-			expect(events).toContain('active:run');
-			microservice.stop();
-			await vi.advanceTimersByTimeAsync(0);
-			expect(events).toContain('active:stop');
-			await vi.advanceTimersByTimeAsync(100);
-
-			expect(executionSettled).toBe(true);
-			expect(events).toContain('active:teardown');
-		} finally {
-			vi.useRealTimers();
-		}
 	});
 
 	it('prioritizes a stop error over an execution error and retains both', async () => {

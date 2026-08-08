@@ -66,36 +66,18 @@ export interface MicroserviceExecutionResult {
 	errors?: readonly unknown[];
 }
 
-export interface MicroserviceOptions {
-	readonly stopTimeout?: number;
-}
-
 export class Microservice {
 	private readonly modules: InstalledModule[] = [];
-	private readonly stopTimeout: number;
 	private readonly stopRequest: Promise<void>;
 	private resolveStopRequest!: () => void;
 	private currentState = MicroserviceState.Idle;
 	private execution?: Promise<MicroserviceExecutionResult>;
 	private stopRequested = false;
 
-	constructor(options: MicroserviceOptions = {}) {
-		this.validateOptions(options);
-		this.stopTimeout = options.stopTimeout ?? 10_000;
+	constructor() {
 		this.stopRequest = new Promise<void>((resolve) => {
 			this.resolveStopRequest = resolve;
 		});
-	}
-
-	private validateOptions(options: MicroserviceOptions): void {
-		if (
-			options.stopTimeout !== undefined &&
-			(!Number.isFinite(options.stopTimeout) || options.stopTimeout < 0)
-		) {
-			throw new RangeError(
-				'Microservice stopTimeout must be a finite, non-negative number.',
-			);
-		}
 	}
 
 	public get state(): MicroserviceState {
@@ -303,33 +285,7 @@ export class Microservice {
 	}
 
 	private stopModule(module: ActiveMicroserviceModule): Promise<void> {
-		let stopCompletion: Promise<void>;
-		try {
-			stopCompletion = Promise.resolve(module.stop());
-		} catch (error) {
-			return Promise.reject(error);
-		}
-
-		return new Promise<void>((resolve, reject) => {
-			const timeout = setTimeout(() => {
-				reject(
-					new Error(
-						`Active module stop timed out after ${this.stopTimeout}ms.`,
-					),
-				);
-			}, this.stopTimeout);
-
-			void stopCompletion.then(
-				() => {
-					clearTimeout(timeout);
-					resolve();
-				},
-				(error) => {
-					clearTimeout(timeout);
-					reject(error);
-				},
-			);
-		});
+		return Promise.resolve().then(() => module.stop());
 	}
 
 	private createExecutionResult(
