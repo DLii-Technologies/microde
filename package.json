@@ -1,6 +1,5 @@
 {
 	"name": "microde",
-	"version": "0.0.1",
 	"description": "The Microde framework for building composable microservices.",
 	"license": "MIT",
 	"author": "DLii Technologies",
