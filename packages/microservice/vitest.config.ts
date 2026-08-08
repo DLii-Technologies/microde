@@ -12,8 +12,6 @@ export default defineConfig({
 	},
 
 	test: {
-		coverage: {
-			include: ['src/**/*.ts'],
-		},
+		name: '@microde/microservice',
 	},
 });
