@@ -25,6 +25,41 @@ describe('Microservice', () => {
 		expect(installedModule.microservice).toBe(microservice);
 	});
 
+	it('runs modules in installation order and tears them down in reverse order', async () => {
+		const events: string[] = [];
+		const microservice = new Microservice();
+
+		const install = (name: string) => {
+			microservice.install((instance) => {
+				events.push(`${name}:create`);
+				return new PassiveModule(instance, events, name);
+			});
+		};
+
+		install('first');
+		install('second');
+
+		await expect(microservice.run()).resolves.toEqual({
+			exitCode: 0,
+		});
+		expect(events).toEqual([
+			'first:create',
+			'second:create',
+			'first:initialize',
+			'second:initialize',
+			'first:setup',
+			'second:setup',
+			'first:run',
+			'second:run',
+			'second:teardown',
+			'first:teardown',
+			'second:shutdown',
+			'first:shutdown',
+			'second:cleanup',
+			'first:cleanup',
+		]);
+	});
+
 	it('runs a passive module and exits cleanly', async () => {
 		const events: string[] = [];
 

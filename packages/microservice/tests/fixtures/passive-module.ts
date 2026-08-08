@@ -4,32 +4,37 @@ export class PassiveModule extends MicroserviceModule {
 	constructor(
 		microservice: Microservice,
 		protected readonly events: string[],
+		protected readonly name?: string,
 	) {
 		super(microservice);
 	}
 
+	protected record(event: string): void {
+		this.events.push(this.name ? `${this.name}:${event}` : event);
+	}
+
 	async initialize(): Promise<void> {
-		this.events.push('initialize');
+		this.record('initialize');
 	}
 
 	async setup(): Promise<void> {
-		this.events.push('setup');
+		this.record('setup');
 	}
 
 	run(): Promise<void> | undefined {
-		this.events.push('run');
+		this.record('run');
 		return undefined;
 	}
 
 	async teardown(): Promise<void> {
-		this.events.push('teardown');
+		this.record('teardown');
 	}
 
 	async shutdown(): Promise<void> {
-		this.events.push('shutdown');
+		this.record('shutdown');
 	}
 
 	async cleanup(): Promise<void> {
-		this.events.push('cleanup');
+		this.record('cleanup');
 	}
 }

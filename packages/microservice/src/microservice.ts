@@ -32,30 +32,60 @@ export class Microservice {
 
 	async run(): Promise<MicroserviceExecutionResult> {
 		this.state = MicroserviceState.Initialization;
-		await Promise.all(this.modules.map((module) => module.initialize()));
+		await this.initializeModules();
 
 		this.state = MicroserviceState.Setup;
-		await Promise.all(this.modules.map((module) => module.setup()));
+		await this.setupModules();
 
 		this.state = MicroserviceState.Running;
-		const activeRuns = this.modules
-			.map((module) => module.run())
-			.filter((run): run is Promise<void> => run !== undefined);
-
-		if (activeRuns.length > 0) {
-			await Promise.race(activeRuns);
-		}
+		await this.executeModules();
 
 		this.state = MicroserviceState.TearDown;
-		await Promise.all(this.modules.map((module) => module.teardown()));
+		await this.teardownModules();
 
 		this.state = MicroserviceState.Shutdown;
-		await Promise.all(this.modules.map((module) => module.shutdown()));
+		await this.shutdownModules();
 
 		this.state = MicroserviceState.CleanUp;
-		await Promise.all(this.modules.map((module) => module.cleanup()));
+		await this.cleanupModules();
 
 		this.state = MicroserviceState.Finished;
 		return { exitCode: 0 };
+	}
+
+	private async initializeModules(): Promise<void> {
+		for (const module of this.modules) {
+			await module.initialize();
+		}
+	}
+
+	private async setupModules(): Promise<void> {
+		for (const module of this.modules) {
+			await module.setup();
+		}
+	}
+
+	private async executeModules(): Promise<void> {
+		for (const module of this.modules) {
+			await module.run();
+		}
+	}
+
+	private async teardownModules(): Promise<void> {
+		for (let index = this.modules.length - 1; index >= 0; index--) {
+			await this.modules[index].teardown();
+		}
+	}
+
+	private async shutdownModules(): Promise<void> {
+		for (let index = this.modules.length - 1; index >= 0; index--) {
+			await this.modules[index].shutdown();
+		}
+	}
+
+	private async cleanupModules(): Promise<void> {
+		for (let index = this.modules.length - 1; index >= 0; index--) {
+			await this.modules[index].cleanup();
+		}
 	}
 }
