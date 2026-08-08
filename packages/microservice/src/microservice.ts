@@ -49,6 +49,7 @@ interface RecordedError {
 
 export enum MicroserviceState {
 	Idle,
+	Installing,
 	Initialization,
 	Setup,
 	Running,
@@ -79,10 +80,22 @@ export class Microservice {
 	private stopRequested = false;
 
 	constructor(options: MicroserviceOptions = {}) {
+		this.validateOptions(options);
 		this.stopTimeout = options.stopTimeout ?? 10_000;
 		this.stopRequest = new Promise<void>((resolve) => {
 			this.resolveStopRequest = resolve;
 		});
+	}
+
+	private validateOptions(options: MicroserviceOptions): void {
+		if (
+			options.stopTimeout !== undefined &&
+			(!Number.isFinite(options.stopTimeout) || options.stopTimeout < 0)
+		) {
+			throw new RangeError(
+				'Microservice stopTimeout must be a finite, non-negative number.',
+			);
+		}
 	}
 
 	public get state(): MicroserviceState {
@@ -97,12 +110,18 @@ export class Microservice {
 				`Cannot install module after microservice has started. Current state: ${MicroserviceState[this.state]}`,
 			);
 		}
-		const module = factory(this);
-		this.modules.push({
-			module,
-			stage: ModuleStage.Installed,
-		});
-		return module;
+
+		this.currentState = MicroserviceState.Installing;
+		try {
+			const module = factory(this);
+			this.modules.push({
+				module,
+				stage: ModuleStage.Installed,
+			});
+			return module;
+		} finally {
+			this.currentState = MicroserviceState.Idle;
+		}
 	}
 
 	run(): Promise<MicroserviceExecutionResult> {
@@ -128,7 +147,10 @@ export class Microservice {
 	}
 
 	stop(): Promise<MicroserviceExecutionResult> {
-		if (this.currentState === MicroserviceState.Idle) {
+		if (
+			this.currentState === MicroserviceState.Idle ||
+			this.currentState === MicroserviceState.Installing
+		) {
 			throw new Error(
 				`Cannot stop microservice before it has started. Current state: ${MicroserviceState[this.currentState]}`,
 			);
@@ -249,26 +271,35 @@ export class Microservice {
 			}
 		});
 
-		await this.stopActiveModules(activeRuns, recordError);
+		const stoppedRuns = await this.stopActiveModules(
+			activeRuns,
+			recordError,
+		);
 
-		await Promise.all(activeRuns.map(({ completion }) => completion));
+		await Promise.all(stoppedRuns.map(({ completion }) => completion));
 		await Promise.all(passiveRuns);
 	}
 
 	private async stopActiveModules(
 		activeRuns: readonly ActiveModuleRun[],
 		recordError: (error: unknown, priority?: ErrorPriority) => void,
-	): Promise<void> {
-		const stopPromises = [...activeRuns]
-			.reverse()
-			.map(({ module }) => this.stopModule(module));
+	): Promise<ActiveModuleRun[]> {
+		const reversedRuns = [...activeRuns].reverse();
+		const stopPromises = reversedRuns.map(({ module }) =>
+			this.stopModule(module),
+		);
 		const stopResults = await Promise.allSettled(stopPromises);
+		const stoppedRuns: ActiveModuleRun[] = [];
 
-		for (const stopResult of stopResults) {
+		for (const [index, stopResult] of stopResults.entries()) {
 			if (stopResult.status === 'rejected') {
 				recordError(stopResult.reason, ErrorPriority.Stop);
+			} else {
+				stoppedRuns.push(reversedRuns[index]);
 			}
 		}
+
+		return stoppedRuns;
 	}
 
 	private stopModule(module: ActiveMicroserviceModule): Promise<void> {

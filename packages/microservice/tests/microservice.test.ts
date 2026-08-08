@@ -30,6 +30,47 @@ describe('Microservice Execution', () => {
 		expect(installedModule.microservice).toBe(microservice);
 	});
 
+	it('prevents starts and stops while a module is installing', async () => {
+		const microservice = new Microservice();
+		let runAttempt!: Promise<unknown>;
+
+		microservice.install((instance) => {
+			expect(instance.state).toBe(MicroserviceState.Installing);
+			runAttempt = instance.run();
+			expect(() => instance.stop()).toThrow(
+				'Cannot stop microservice before it has started. Current state: Installing',
+			);
+			return new PassiveModule(instance, []);
+		});
+
+		await expect(runAttempt).rejects.toThrow(
+			'Cannot run microservice more than once. Current state: Installing',
+		);
+		expect(microservice.state).toBe(MicroserviceState.Idle);
+		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+	});
+
+	it('returns to idle when a module factory fails', () => {
+		const failure = new Error('installation failed');
+		const microservice = new Microservice();
+
+		expect(() =>
+			microservice.install(() => {
+				throw failure;
+			}),
+		).toThrow(failure);
+		expect(microservice.state).toBe(MicroserviceState.Idle);
+	});
+
+	it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+		'rejects an invalid stop timeout of %s',
+		(stopTimeout) => {
+			expect(() => new Microservice({ stopTimeout })).toThrow(
+				'Microservice stopTimeout must be a finite, non-negative number.',
+			);
+		},
+	);
+
 	it('rejects module installation after the microservice has started', async () => {
 		const microservice = new Microservice();
 
@@ -724,6 +765,27 @@ describe('Microservice Execution', () => {
 		expect(events).toContain('first:stop');
 		expect(events).toContain('second:stop');
 	});
+
+	it('handles a synchronous active module stop error', async () => {
+		const events: string[] = [];
+		const failure = new Error('synchronous stop failed');
+		const microservice = new Microservice();
+
+		microservice.install((instance) => {
+			return new (class extends ActiveModule {
+				override stop(): Promise<void> {
+					this.record('stop');
+					throw failure;
+				}
+			})(instance, events, 'active');
+		});
+
+		await expect(microservice.run()).resolves.toEqual({
+			exitCode: 1,
+			error: failure,
+		});
+		expect(events).toContain('active:teardown');
+	});
 });
 
 describe('Microservice Stopping', () => {
@@ -963,6 +1025,44 @@ describe('Microservice Stopping', () => {
 			expect(events).toContain('active:teardown');
 			expect(events).toContain('active:shutdown');
 			expect(events).toContain('active:cleanup');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('continues teardown after a stop timeout when the active run never settles', async () => {
+		vi.useFakeTimers();
+		try {
+			const events: string[] = [];
+			const runNeverCompletes = new Promise<void>(() => {});
+			const stopNeverCompletes = new Promise<void>(() => {});
+			const microservice = new Microservice({ stopTimeout: 100 });
+
+			microservice.install((instance) => {
+				return new ActiveModule(
+					instance,
+					events,
+					'active',
+					runNeverCompletes,
+					() => {},
+					() => {},
+					stopNeverCompletes,
+				);
+			});
+
+			let executionSettled = false;
+			const execution = microservice.run().finally(() => {
+				executionSettled = true;
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			expect(events).toContain('active:run');
+			microservice.stop();
+			await vi.advanceTimersByTimeAsync(0);
+			expect(events).toContain('active:stop');
+			await vi.advanceTimersByTimeAsync(100);
+
+			expect(executionSettled).toBe(true);
+			expect(events).toContain('active:teardown');
 		} finally {
 			vi.useRealTimers();
 		}
