@@ -1,1 +1,2 @@
-export * from "@microde/microservice/microservice";
+export * from './microservice.js';
+export * from './microservice-module.js';
