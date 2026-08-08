@@ -1138,3 +1138,56 @@ describe('Microservice Stopping', () => {
 		await expect(stopping).resolves.toEqual({ exitCode: 0 });
 	});
 });
+
+describe('Microservice Panic', () => {
+	it('prints a stack trace and immediately exits with code 1', () => {
+		const exitFailure = new Error('process exited');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const trace = vi.spyOn(console, 'trace').mockImplementation(() => {});
+		const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+			throw exitFailure;
+		});
+
+		try {
+			expect(() => new Microservice().panic()).toThrow(exitFailure);
+			expect(error).not.toHaveBeenCalled();
+			expect(trace).toHaveBeenCalledOnce();
+			expect(exit).toHaveBeenCalledWith(1);
+			expect(trace.mock.invocationCallOrder[0]).toBeLessThan(
+				exit.mock.invocationCallOrder[0],
+			);
+		} finally {
+			error.mockRestore();
+			trace.mockRestore();
+			exit.mockRestore();
+		}
+	});
+
+	it('prints a supplied error before the stack trace', () => {
+		const failure = new Error('panic failure');
+		const exitFailure = new Error('process exited');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const trace = vi.spyOn(console, 'trace').mockImplementation(() => {});
+		const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+			throw exitFailure;
+		});
+
+		try {
+			expect(() => new Microservice().panic(failure)).toThrow(
+				exitFailure,
+			);
+			expect(error).toHaveBeenCalledWith(failure);
+			expect(trace).toHaveBeenCalledOnce();
+			expect(error.mock.invocationCallOrder[0]).toBeLessThan(
+				trace.mock.invocationCallOrder[0],
+			);
+			expect(trace.mock.invocationCallOrder[0]).toBeLessThan(
+				exit.mock.invocationCallOrder[0],
+			);
+		} finally {
+			error.mockRestore();
+			trace.mockRestore();
+			exit.mockRestore();
+		}
+	});
+});

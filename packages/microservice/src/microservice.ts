@@ -131,6 +131,14 @@ export class Microservice {
 		return this.execution;
 	}
 
+	panic(error?: unknown): never {
+		if (error !== undefined) {
+			console.error(error);
+		}
+		console.trace();
+		process.exit(1);
+	}
+
 	stop(): Promise<MicroserviceExecutionResult>;
 	stop(exitCode: number): Promise<MicroserviceExecutionResult>;
 	stop(error: unknown): Promise<MicroserviceExecutionResult>;
