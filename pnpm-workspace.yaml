@@ -1,2 +1,6 @@
 packages:
     - 'packages/*'
+    - 'website'
+allowBuilds:
+    '@swc/core': true
+    core-js: false

@@ -1,3 +1,6 @@
+# Mac
+.DS_Store
+
 # Logs
 logs
 *.log
@@ -106,6 +109,8 @@ dist
 
 # Docusaurus cache and generated files
 .docusaurus
+website/build/
+website/docs/api-reference/
 
 # Serverless directories
 .serverless/
