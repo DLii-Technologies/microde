@@ -2,3 +2,5 @@ node_modules
 coverage
 dist
 pnpm-lock.yaml
+website/build
+website/docs/api-reference

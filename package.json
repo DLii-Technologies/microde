@@ -9,6 +9,11 @@
 	"packageManager": "pnpm@11.20.0",
 	"scripts": {
 		"build": "pnpm -r build",
+		"docs:api": "pnpm --dir website docs:api",
+		"docs:build": "pnpm --dir website build",
+		"docs:clean": "pnpm --dir website clean",
+		"docs:dev": "pnpm --dir website start",
+		"docs:serve": "pnpm --dir website serve",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"test": "vitest run",

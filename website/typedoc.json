@@ -1,0 +1,13 @@
+{
+	"entryPoints": ["../packages/microservice/src/index.ts"],
+	"tsconfig": "./tsconfig.typedoc.json",
+	"out": "./docs/api-reference",
+	"plugin": ["typedoc-plugin-markdown"],
+	"readme": "none",
+	"githubPages": false,
+	"excludeInternal": true,
+	"excludePrivate": true,
+	"excludeProtected": true,
+	"categorizeByGroup": true,
+	"hidePageHeader": true
+}

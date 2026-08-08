@@ -1,6 +1,6 @@
 import {
 	ActiveMicroserviceModule,
-	type PassiveMicroserviceModule,
+	type MicroserviceModule,
 } from './microservice-module.js';
 
 enum ModuleStage {
@@ -18,8 +18,6 @@ enum ModuleStage {
 	CleaningUp,
 	CleanedUp,
 }
-
-type MicroserviceModule = ActiveMicroserviceModule | PassiveMicroserviceModule;
 
 interface InstalledModule {
 	readonly module: MicroserviceModule;
@@ -48,25 +46,55 @@ interface RecordedError {
 	readonly sequence: number;
 }
 
+/** The observable lifecycle state of a {@link Microservice}. */
 export enum MicroserviceState {
+	/** The service accepts module installations and has not started. */
 	Idle,
+	/** A module factory is currently being evaluated. */
 	Installing,
+	/** Installed modules are being initialized. */
 	Initialization,
+	/** Initialized modules are being set up. */
 	Setup,
+	/** Modules are running. */
 	Running,
+	/** Setup is being reversed. */
 	TearDown,
+	/** Initialized resources are being released. */
 	Shutdown,
+	/** Final module cleanup is running. */
 	CleanUp,
+	/** Execution completed without an error or non-zero requested exit code. */
 	Finished,
+	/** Execution completed with an error or non-zero requested exit code. */
 	Failed,
 }
 
+/** The outcome returned when a microservice finishes its lifecycle. */
 export interface MicroserviceExecutionResult {
+	/** The suggested process exit code. */
 	exitCode: number;
+	/** The highest-priority error encountered, when execution failed. */
 	error?: unknown;
+	/** All errors in priority order when more than one error was encountered. */
 	errors?: readonly unknown[];
 }
 
+/**
+ * Composes modules and coordinates their complete lifecycle.
+ *
+ * A microservice instance can run only once. Install all modules before calling
+ * {@link Microservice.run | run}.
+ *
+ * @example
+ * ```ts
+ * const service = new Microservice();
+ * service.install((microservice) => new DatabaseModule(microservice));
+ *
+ * const result = await service.run();
+ * process.exitCode = result.exitCode;
+ * ```
+ */
 export class Microservice {
 	private readonly modules: InstalledModule[] = [];
 	private readonly stopRequest: Promise<void>;
@@ -83,10 +111,18 @@ export class Microservice {
 		});
 	}
 
+	/** The service's current lifecycle state. */
 	public get state(): MicroserviceState {
 		return this.currentState;
 	}
 
+	/**
+	 * Creates and installs a module.
+	 *
+	 * @param factory A synchronous factory that receives this microservice.
+	 * @returns The installed module.
+	 * @throws If called after execution has started, or if another installation is in progress.
+	 */
 	install(
 		factory: (microservice: Microservice) => MicroserviceModule,
 	): MicroserviceModule {
@@ -109,6 +145,13 @@ export class Microservice {
 		}
 	}
 
+	/**
+	 * Runs the module lifecycle once.
+	 *
+	 * Lifecycle failures are represented in the resolved result so cleanup can
+	 * finish before the caller receives the outcome. Calling `run` more than once
+	 * returns a rejected promise.
+	 */
 	run(): Promise<MicroserviceExecutionResult> {
 		if (this.currentState !== MicroserviceState.Idle) {
 			return Promise.reject(
@@ -131,6 +174,11 @@ export class Microservice {
 		return this.execution;
 	}
 
+	/**
+	 * Logs an optional fatal error and terminates the process immediately.
+	 *
+	 * This bypasses the normal module shutdown lifecycle.
+	 */
 	panic(error?: unknown): never {
 		if (error !== undefined) {
 			console.error(error);
@@ -139,9 +187,13 @@ export class Microservice {
 		process.exit(1);
 	}
 
+	/** Requests an orderly stop and resolves with the existing execution result. */
 	stop(): Promise<MicroserviceExecutionResult>;
+	/** Requests an orderly stop with a specific exit code. */
 	stop(exitCode: number): Promise<MicroserviceExecutionResult>;
+	/** Requests an orderly stop caused by an error. */
 	stop(error: unknown): Promise<MicroserviceExecutionResult>;
+	/** Requests an orderly stop with both an exit code and error. */
 	stop(
 		exitCode: number,
 		error: unknown,
