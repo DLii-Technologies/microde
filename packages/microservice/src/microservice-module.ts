@@ -13,22 +13,22 @@ export abstract class MicroserviceModule {
 	constructor(public readonly microservice: Microservice) {}
 
 	/** Acquires resources needed to configure the module. */
-	abstract initialize(): Promise<void>;
+	async initialize(): Promise<void> {}
 
 	/** Connects the initialized module to the rest of the service. */
-	abstract setup(): Promise<void>;
+	async setup(): Promise<void> {}
 
 	/** Performs the module's work. */
 	abstract run(): Promise<void>;
 
 	/** Reverses work performed during setup. */
-	abstract teardown(): Promise<void>;
+	async teardown(): Promise<void> {}
 
 	/** Releases resources acquired during initialization. */
-	abstract shutdown(): Promise<void>;
+	async shutdown(): Promise<void> {}
 
 	/** Performs final cleanup, including when an earlier lifecycle phase failed. */
-	abstract cleanup(): Promise<void>;
+	async cleanup(): Promise<void> {}
 }
 
 /**
@@ -37,7 +37,10 @@ export abstract class MicroserviceModule {
  * A microservice containing only passive modules finishes after every module's
  * `run` promise settles.
  */
-export abstract class PassiveMicroserviceModule extends MicroserviceModule {}
+export abstract class PassiveMicroserviceModule extends MicroserviceModule {
+	/** Performs no work by default. */
+	async run(): Promise<void> {}
+}
 
 /**
  * A long-running module that can be asked to stop.
