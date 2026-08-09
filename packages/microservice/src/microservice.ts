@@ -123,9 +123,9 @@ export class Microservice {
 	 * @returns The installed module.
 	 * @throws If called after execution has started, or if another installation is in progress.
 	 */
-	install(
-		factory: (microservice: Microservice) => MicroserviceModule,
-	): MicroserviceModule {
+	install<Template extends MicroserviceModule>(
+		factory: (microservice: Microservice) => Template,
+	): Template {
 		if (this.state !== MicroserviceState.Idle) {
 			throw new Error(
 				`Cannot install module after microservice has started. Current state: ${MicroserviceState[this.state]}`,

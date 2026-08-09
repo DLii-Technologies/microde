@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { Microservice, MicroserviceState } from '@microde/microservice';
 
@@ -26,6 +26,7 @@ describe('Microservice Execution', () => {
 			return new PassiveModule(instance, []);
 		});
 
+		expectTypeOf(installedModule).toEqualTypeOf<PassiveModule>();
 		expect(installedModule).toBeInstanceOf(PassiveModule);
 		expect(installedModule.microservice).toBe(microservice);
 	});
