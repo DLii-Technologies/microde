@@ -1,5 +1,11 @@
 # @microde/microservice
 
+## 0.2.1
+
+### Patch Changes
+
+- e0a2c2c: Fix: Use template typing to microservice install method to return correct instance type.
+
 ## 0.2.0
 
 ### Minor Changes
