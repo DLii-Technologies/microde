@@ -1,5 +1,8 @@
 # @microde/microservice
 
+[![npm version](https://img.shields.io/npm/v/%40microde%2Fmicroservice.svg)](https://www.npmjs.com/package/@microde/microservice)
+[![code coverage](https://codecov.io/gh/DLii-Technologies/microde/graph/badge.svg?component=microservice)](https://codecov.io/gh/DLii-Technologies/microde)
+
 The core driver for Microde service composition and lifecycle management.
 
 ```ts
