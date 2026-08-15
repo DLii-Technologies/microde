@@ -10,11 +10,15 @@ title: Compatibility and limitations
 
 ## Runtime
 
-The core currently depends on Node.js behavior for `process.exit`, `process.exitCode`, and console output. The package does not yet declare a formal Node.js engine range; that should be finalized as part of the `0.1.0` release decision.
+The TypeScript runtime currently depends on Node.js behavior for `process.exit`,
+`process.exitCode`, and console output. The package does not yet declare a formal
+Node.js engine range.
 
 ## API stability
 
-The `0.1.x` line is an initial release series. Public APIs may still evolve as lifecycle patterns are exercised in production. Changes should be recorded in release notes and follow semantic versioning within the published compatibility policy.
+The project is still pre-1.0. Public APIs may evolve as lifecycle patterns are
+exercised in production. Changes should be recorded in release notes and follow
+semantic versioning within the published compatibility policy.
 
 ## Current scope
 

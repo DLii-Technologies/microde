@@ -33,6 +33,24 @@ Calling `run()` seals composition. Microde validates all bindings, rejects depen
 
 Dependencies form the lifecycle DAG and are available through `SetupContext` and `RunContext`. References do not affect lifecycle order, may form cycles, and are available only through `RunContext`.
 
+```mermaid
+flowchart LR
+    orders[Orders module]
+    database[Database module]
+    events[Event publisher]
+
+    orders -->|Dependency: database| database
+    orders -.->|Reference: events| events
+    events -.->|Reference: orders| orders
+
+    classDef dependency stroke-width:2px
+    class database dependency
+```
+
+The solid dependency determines lifecycle order: the database starts before
+orders and stops after it. The dotted references can form a cycle because they
+are resolved for `run` without changing lifecycle order.
+
 ## Module context
 
 Every module receives a `MicroserviceContext` through its constructor. The base module makes it available to subclasses as the protected, read-only `context` property. The context deliberately contains only the service operations a module needs:

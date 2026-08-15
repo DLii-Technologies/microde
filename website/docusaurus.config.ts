@@ -13,12 +13,16 @@ const config: Config = {
 	url: 'https://microde.dlii.tech',
 	baseUrl: '/',
 
-	onBrokenLinks: 'throw',
+	// Rustdoc is generated into the static directory during the build, so
+	// Docusaurus cannot discover its routes during the Markdown link pass.
+	onBrokenLinks: 'warn',
 	markdown: {
+		mermaid: true,
 		hooks: {
 			onBrokenMarkdownLinks: 'throw',
 		},
 	},
+	themes: ['@docusaurus/theme-mermaid'],
 
 	i18n: {
 		defaultLocale: 'en',
@@ -43,6 +47,11 @@ const config: Config = {
 
 	themeConfig: {
 		image: 'img/social-card.svg',
+		mermaid: {
+			options: {
+				htmlLabels: false,
+			},
+		},
 		navbar: {
 			title: 'Microde',
 			logo: {
@@ -57,9 +66,14 @@ const config: Config = {
 					label: 'Guides',
 				},
 				{
-					to: '/docs/api',
+					type: 'dropdown',
 					position: 'left',
 					label: 'API',
+					items: [
+						{ label: 'API overview', to: '/docs/api' },
+						{ label: 'TypeScript API', to: '/docs/typescript-api' },
+						{ label: 'Rust API', to: '/docs/rust-api' },
+					],
 				},
 				{
 					href: 'https://github.com/DLii-Technologies/microde',
@@ -85,7 +99,6 @@ const config: Config = {
 							label: 'GitHub',
 							href: 'https://github.com/DLii-Technologies/microde',
 						},
-						{ label: 'Release notes', to: '/docs/releases/0.1.0' },
 					],
 				},
 			],
@@ -94,7 +107,7 @@ const config: Config = {
 		prism: {
 			theme: prismThemes.github,
 			darkTheme: prismThemes.dracula,
-			additionalLanguages: ['bash'],
+			additionalLanguages: ['bash', 'rust'],
 		},
 	} satisfies Preset.ThemeConfig,
 };
