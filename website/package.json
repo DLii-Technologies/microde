@@ -5,7 +5,7 @@
 	"scripts": {
 		"build": "pnpm run docs:api && docusaurus build",
 		"clean": "docusaurus clear && node scripts/clean-generated.mjs",
-		"docs:api": "node scripts/clean-generated.mjs && typedoc --options typedoc.json",
+		"docs:api": "node scripts/clean-generated.mjs && typedoc --options typedoc.json && node scripts/generate-rustdoc.mjs",
 		"start": "pnpm run docs:api && docusaurus start",
 		"serve": "docusaurus serve",
 		"typecheck": "tsc --noEmit"

@@ -111,6 +111,7 @@ dist
 .docusaurus
 website/build/
 website/docs/api-reference/
+website/static/rustdoc/
 
 # Serverless directories
 .serverless/
