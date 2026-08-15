@@ -1,0 +1,8 @@
+[git]
+default_branch = "master"
+
+[github]
+repository = "DLii-Technologies/microde"
+
+[packages]
+ignore_unpublished = true

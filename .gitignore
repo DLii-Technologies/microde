@@ -149,3 +149,6 @@ vite.config.ts.timestamp-*
 
 # Package build artifacts
 packages/*/LICENSE
+
+# Rust build artifacts
+target/
