@@ -5,8 +5,8 @@
 	"scripts": {
 		"build": "pnpm run docs:api && docusaurus build",
 		"clean": "docusaurus clear && node scripts/clean-generated.mjs",
-		"docs:api": "node scripts/clean-generated.mjs && typedoc --options typedoc.json && node scripts/generate-rustdoc.mjs",
-		"start": "pnpm run docs:api && docusaurus start",
+		"docs:api": "node scripts/clean-generated.mjs && typedoc --options typedoc.json",
+		"start": "docusaurus clear && pnpm run docs:api && docusaurus start",
 		"serve": "docusaurus serve",
 		"typecheck": "tsc --noEmit"
 	},
@@ -14,6 +14,7 @@
 		"@docusaurus/core": "^3.10.2",
 		"@docusaurus/faster": "^3.10.2",
 		"@docusaurus/preset-classic": "^3.10.2",
+		"@docusaurus/theme-mermaid": "^3.10.2",
 		"@mdx-js/react": "^3.1.1",
 		"clsx": "^2.1.1",
 		"prism-react-renderer": "^2.4.1",

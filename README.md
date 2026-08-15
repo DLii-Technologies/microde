@@ -8,18 +8,20 @@ Microde is a framework for building software as a collection of composable, inde
 
 ## Installation
 
+For TypeScript:
+
 ```sh
 npm install @microde/microservice
 ```
 
-Microde is published as an ECMAScript module and includes TypeScript declarations.
+For Rust:
 
-For Rust applications, add the `microde-microservice` crate from this workspace:
-
-```toml
-[dependencies]
-microde-microservice = "0.2"
+```sh
+cargo add microde-microservice
 ```
+
+Both packages expose the same explicit composition and lifecycle model through
+their language-native APIs.
 
 ## Quick start
 

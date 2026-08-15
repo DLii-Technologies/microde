@@ -26,6 +26,24 @@ do not affect ordering.
 
 Microde tracks how far each module progressed. If initialization fails, only modules that reached initialization are shut down, but every installed module is cleaned up. If setup fails, only modules that reached setup are torn down.
 
+```mermaid
+flowchart TD
+    start([Start]) --> initialize[Initialize modules]
+    initialize --> initialized{Initialization succeeded?}
+    initialized -- No --> shutdownInitialized[Shut down initialized modules]
+    initialized -- Yes --> setup[Set up modules]
+    setup --> setupComplete{Setup succeeded?}
+    setupComplete -- No --> teardownSetup[Tear down modules that reached setup]
+    setupComplete -- Yes --> run[Run modules]
+    run --> stop[Stop modules in reverse order]
+    stop --> teardownAll[Tear down configured modules]
+    teardownSetup --> shutdownInitialized
+    teardownAll --> shutdownAll[Shut down initialized modules]
+    shutdownInitialized --> cleanup[Clean up every installed module]
+    shutdownAll --> cleanup
+    cleanup --> result([Return execution result])
+```
+
 This lets lifecycle methods assume that their corresponding forward phase was reached. Cleanup is the exception: it must be safe after any earlier outcome.
 
 ## Implementation guidance

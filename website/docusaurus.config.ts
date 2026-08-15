@@ -17,10 +17,12 @@ const config: Config = {
 	// Docusaurus cannot discover its routes during the Markdown link pass.
 	onBrokenLinks: 'warn',
 	markdown: {
+		mermaid: true,
 		hooks: {
 			onBrokenMarkdownLinks: 'throw',
 		},
 	},
+	themes: ['@docusaurus/theme-mermaid'],
 
 	i18n: {
 		defaultLocale: 'en',
@@ -45,6 +47,11 @@ const config: Config = {
 
 	themeConfig: {
 		image: 'img/social-card.svg',
+		mermaid: {
+			options: {
+				htmlLabels: false,
+			},
+		},
 		navbar: {
 			title: 'Microde',
 			logo: {
@@ -59,14 +66,14 @@ const config: Config = {
 					label: 'Guides',
 				},
 				{
-					to: '/docs/api',
+					type: 'dropdown',
 					position: 'left',
 					label: 'API',
-				},
-				{
-					href: '/rustdoc/index.html',
-					position: 'left',
-					label: 'Rust API',
+					items: [
+						{ label: 'API overview', to: '/docs/api' },
+						{ label: 'TypeScript API', to: '/docs/typescript-api' },
+						{ label: 'Rust API', to: '/docs/rust-api' },
+					],
 				},
 				{
 					href: 'https://github.com/DLii-Technologies/microde',
@@ -92,7 +99,6 @@ const config: Config = {
 							label: 'GitHub',
 							href: 'https://github.com/DLii-Technologies/microde',
 						},
-						{ label: 'Release notes', to: '/docs/releases/0.1.0' },
 					],
 				},
 			],
