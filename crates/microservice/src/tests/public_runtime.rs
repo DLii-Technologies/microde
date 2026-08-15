@@ -120,6 +120,22 @@ fn service() -> Microservice {
     Microservice::with_context(Arc::new(TestContext))
 }
 
+#[test]
+fn panic_messages_cover_string_and_unknown_payloads() {
+    assert_eq!(
+        super::panic_message(Box::new("borrowed panic")),
+        "borrowed panic"
+    );
+    assert_eq!(
+        super::panic_message(Box::new(String::from("owned panic"))),
+        "owned panic"
+    );
+    assert_eq!(
+        super::panic_message(Box::new(42_u32)),
+        "microservice lifecycle panicked"
+    );
+}
+
 fn wait_for_state(service: &Microservice, expected: MicroserviceState) {
     let deadline = Instant::now() + Duration::from_secs(1);
     while service.state() != expected {
