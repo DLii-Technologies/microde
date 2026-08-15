@@ -1,8 +1,10 @@
 # @microde/microservice
 
-## Unreleased
+## 0.5.0 — 2026-08-15
 
-- Add stable named handles, explicit provider-backed relationships, atomic graph wiring, dependency-first lifecycle ordering, and setup/run access contexts.
+### Minor changes
+
+- [96e5149](https://github.com/DLii-Technologies/microde/commit/96e51499d43e1b5c774e8d079babefed28f41191) Add module dependency management — Thanks @SirDavidLudwig!
 
 ## 0.4.0 — 2026-08-15
 
