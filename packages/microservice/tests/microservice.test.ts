@@ -1,6 +1,12 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
-import { Microservice, MicroserviceState } from '@microde/microservice';
+import {
+	Microservice,
+	type MicroserviceContext,
+	MicroserviceModule,
+	MicroserviceState,
+	ModuleKind,
+} from '@microde/microservice';
 
 import { PassiveModule } from './fixtures/passive-module.js';
 import { ActiveModule } from './fixtures/active-module.js';
@@ -21,27 +27,31 @@ describe('Microservice Execution', () => {
 
 	it('installs a module through a factory', () => {
 		const microservice = new Microservice();
+		let receivedContext!: MicroserviceContext;
 
 		const installedModule = microservice.install((instance) => {
+			receivedContext = instance;
 			return new PassiveModule(instance, []);
 		});
 
 		expectTypeOf(installedModule).toEqualTypeOf<PassiveModule>();
 		expect(installedModule).toBeInstanceOf(PassiveModule);
-		expect(installedModule.context).toBe(microservice);
+		expect(receivedContext).not.toBe(microservice);
+		expect(receivedContext.requestStop).toEqual(expect.any(Function));
+		expect(receivedContext.panic).toEqual(expect.any(Function));
 	});
 
 	it('prevents starts and stops while a module is installing', async () => {
 		const microservice = new Microservice();
 		let runAttempt!: Promise<unknown>;
 
-		microservice.install((instance) => {
-			expect(instance.state).toBe(MicroserviceState.Installing);
-			runAttempt = instance.run();
-			expect(() => instance.stop()).toThrow(
+		microservice.install((context) => {
+			expect(microservice.state).toBe(MicroserviceState.Installing);
+			runAttempt = microservice.run();
+			expect(() => microservice.stop()).toThrow(
 				'Cannot stop microservice before it has started. Current state: Installing',
 			);
-			return new PassiveModule(instance, []);
+			return new PassiveModule(context, []);
 		});
 
 		await expect(runAttempt).rejects.toThrow(
@@ -162,6 +172,28 @@ describe('Microservice Execution', () => {
 			'shutdown',
 			'cleanup',
 		]);
+	});
+
+	it('classifies active modules by kind rather than class identity', async () => {
+		const events: string[] = [];
+		const microservice = new Microservice();
+		microservice.install(
+			(context) =>
+				new (class extends MicroserviceModule {
+					readonly kind = ModuleKind.Active;
+
+					async run(): Promise<void> {
+						events.push('run');
+					}
+
+					async stop(): Promise<void> {
+						events.push('stop');
+					}
+				})(context),
+		);
+
+		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+		expect(events).toEqual(['run', 'stop']);
 	});
 
 	it('runs modules in installation order and tears them down in reverse order', async () => {
@@ -789,7 +821,7 @@ describe('Microservice Stopping', () => {
 		);
 	});
 
-	it('returns no value and handles repeated stop requests once', async () => {
+	it('returns the execution promise and handles repeated stop requests once', async () => {
 		const events: string[] = [];
 		let releaseRun!: () => void;
 		const runCompletion = new Promise<void>((resolve) => {
@@ -814,20 +846,20 @@ describe('Microservice Stopping', () => {
 		const firstStop = microservice.stop();
 		const secondStop = microservice.stop();
 
-		expect(firstStop).toBeUndefined();
-		expect(secondStop).toBeUndefined();
+		expect(firstStop).toBe(execution);
+		expect(secondStop).toBe(execution);
 		await expect(execution).resolves.toEqual({ exitCode: 0 });
 		expect(events.filter((event) => event === 'active:stop')).toHaveLength(
 			1,
 		);
 	});
 
-	it('does not deadlock when a module awaits its stop request', async () => {
+	it('does not deadlock when a module requests a stop', async () => {
 		const microservice = new Microservice();
 		microservice.install((instance) => {
 			return new (class extends PassiveModule {
 				override async run(): Promise<void> {
-					await this.context.stop();
+					this.context.requestStop();
 				}
 			})(instance, [], 'passive');
 		});
@@ -840,7 +872,7 @@ describe('Microservice Stopping', () => {
 		microservice.install((instance) => new ActiveModule(instance, []));
 
 		const execution = microservice.run();
-		expect(microservice.stop(42)).toBeUndefined();
+		expect(microservice.stop(42)).toBe(execution);
 		await expect(execution).resolves.toEqual({ exitCode: 42 });
 		expect(microservice.state).toBe(MicroserviceState.Failed);
 	});
@@ -851,7 +883,7 @@ describe('Microservice Stopping', () => {
 		microservice.install((instance) => new ActiveModule(instance, []));
 
 		const execution = microservice.run();
-		expect(microservice.stop(failure)).toBeUndefined();
+		expect(microservice.stop(failure)).toBe(execution);
 		await expect(execution).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
@@ -864,7 +896,7 @@ describe('Microservice Stopping', () => {
 		microservice.install((instance) => new ActiveModule(instance, []));
 
 		const execution = microservice.run();
-		expect(microservice.stop(75, failure)).toBeUndefined();
+		expect(microservice.stop(75, failure)).toBe(execution);
 		await expect(execution).resolves.toEqual({
 			exitCode: 75,
 			error: failure,
@@ -880,8 +912,8 @@ describe('Microservice Stopping', () => {
 		const firstStop = microservice.stop(2, firstFailure);
 		const secondStop = microservice.stop(3, new Error('second request'));
 
-		expect(firstStop).toBeUndefined();
-		expect(secondStop).toBeUndefined();
+		expect(firstStop).toBe(execution);
+		expect(secondStop).toBe(execution);
 		await expect(execution).resolves.toEqual({
 			exitCode: 2,
 			error: firstFailure,
@@ -1146,7 +1178,7 @@ describe('Microservice Stopping', () => {
 		await vi.waitFor(() =>
 			expect(microservice.state).toBe(MicroserviceState.Shutdown),
 		);
-		expect(microservice.stop()).toBeUndefined();
+		expect(microservice.stop()).toBe(execution);
 
 		releaseShutdown();
 		await expect(execution).resolves.toEqual({ exitCode: 0 });
@@ -1154,6 +1186,32 @@ describe('Microservice Stopping', () => {
 });
 
 describe('Microservice Panic', () => {
+	it('delegates context panic to the runtime panic behavior', () => {
+		const exitFailure = new Error('process exited');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const trace = vi.spyOn(console, 'trace').mockImplementation(() => {});
+		const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+			throw exitFailure;
+		});
+		const failure = new Error('context panic');
+		const microservice = new Microservice();
+		let receivedContext!: MicroserviceContext;
+		microservice.install((context) => {
+			receivedContext = context;
+			return new PassiveModule(context, []);
+		});
+
+		try {
+			expect(() => receivedContext.panic(failure)).toThrow(exitFailure);
+			expect(error).toHaveBeenCalledWith(failure);
+			expect(exit).toHaveBeenCalledWith(1);
+		} finally {
+			error.mockRestore();
+			trace.mockRestore();
+			exit.mockRestore();
+		}
+	});
+
 	it('prints a stack trace and immediately exits with code 1', () => {
 		const exitFailure = new Error('process exited');
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});

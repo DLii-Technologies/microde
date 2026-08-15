@@ -1,5 +1,11 @@
 import type { MicroserviceContext } from './microservice-context.js';
 
+/** Describes whether a module completes independently or requires a stop. */
+export enum ModuleKind {
+	Passive,
+	Active,
+}
+
 /**
  * Defines the lifecycle shared by every module installed in a microservice.
  *
@@ -9,8 +15,10 @@ import type { MicroserviceContext } from './microservice-context.js';
  * instead of extending this class directly.
  */
 export abstract class MicroserviceModule {
-	/** Creates a module with access to the supplied microservice context. */
-	constructor(public readonly context: MicroserviceContext) {}
+	abstract readonly kind: ModuleKind;
+
+	/** Creates a module operating within the supplied microservice context. */
+	constructor(protected readonly context: MicroserviceContext) {}
 
 	/** Acquires resources needed to configure the module. */
 	async initialize(): Promise<void> {}
@@ -38,6 +46,8 @@ export abstract class MicroserviceModule {
  * `run` promise settles.
  */
 export abstract class PassiveMicroserviceModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+
 	/** Performs no work by default. */
 	async run(): Promise<void> {}
 }
@@ -48,6 +58,8 @@ export abstract class PassiveMicroserviceModule extends MicroserviceModule {
  * When execution ends, active modules are stopped in reverse installation order.
  */
 export abstract class ActiveMicroserviceModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Active;
+
 	/** Requests that the running module finish its `run` operation. */
 	abstract stop(): Promise<void>;
 }
