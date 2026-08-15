@@ -1,5 +1,13 @@
 # @microde/microservice
 
+## 0.3.0
+
+### Minor Changes
+
+- 490400c: Added MicroserviceContext contract to be used with module instead of Microservice instance
+- cf1e6b5: Remove return value from stop() so that modules cannot cause deadlocking
+- 28d8f32: Refactor TypeScript implementation and API
+
 ## 0.2.1
 
 ### Patch Changes
