@@ -62,11 +62,6 @@ const config: Config = {
 					label: 'API',
 				},
 				{
-					href: 'https://microde.dlii.tech/rustdoc/microde_microservice/',
-					position: 'left',
-					label: 'Rust API',
-				},
-				{
 					href: 'https://github.com/DLii-Technologies/microde',
 					label: 'GitHub',
 					position: 'right',
