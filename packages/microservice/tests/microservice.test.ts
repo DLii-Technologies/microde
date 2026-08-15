@@ -28,7 +28,7 @@ describe('Microservice Execution', () => {
 
 		expectTypeOf(installedModule).toEqualTypeOf<PassiveModule>();
 		expect(installedModule).toBeInstanceOf(PassiveModule);
-		expect(installedModule.microservice).toBe(microservice);
+		expect(installedModule.context).toBe(microservice);
 	});
 
 	it('prevents starts and stops while a module is installing', async () => {

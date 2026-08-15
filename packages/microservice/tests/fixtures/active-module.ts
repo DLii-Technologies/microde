@@ -1,9 +1,9 @@
-import type { Microservice } from '@microde/microservice';
+import type { MicroserviceContext } from '@microde/microservice';
 import { ActiveMicroserviceModule } from '@microde/microservice';
 
 export class ActiveModule extends ActiveMicroserviceModule {
 	constructor(
-		microservice: Microservice,
+		microservice: MicroserviceContext,
 		events: string[],
 		name?: string,
 		private readonly completion: Promise<void> = Promise.resolve(),

@@ -2,6 +2,7 @@ import {
 	ActiveMicroserviceModule,
 	type MicroserviceModule,
 } from './microservice-module.js';
+import type { MicroserviceContext } from './microservice-context.js';
 
 enum ModuleStage {
 	Installed,
@@ -95,7 +96,7 @@ export interface MicroserviceExecutionResult {
  * process.exitCode = result.exitCode;
  * ```
  */
-export class Microservice {
+export class Microservice implements MicroserviceContext {
 	private readonly modules: InstalledModule[] = [];
 	private readonly stopRequest: Promise<void>;
 	private resolveStopRequest!: () => void;
@@ -123,9 +124,9 @@ export class Microservice {
 	 * @returns The installed module.
 	 * @throws If called after execution has started, or if another installation is in progress.
 	 */
-	install<Template extends MicroserviceModule>(
-		factory: (microservice: Microservice) => Template,
-	): Template {
+	install<Module extends MicroserviceModule>(
+		factory: (microservice: Microservice) => Module,
+	): Module {
 		if (this.state !== MicroserviceState.Idle) {
 			throw new Error(
 				`Cannot install module after microservice has started. Current state: ${MicroserviceState[this.state]}`,
