@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add stable named handles, owned typed providers, explicit relationships, atomic graph wiring, and lifecycle access contexts.
+- Add stable named handles, owned typed providers, explicit relationships, atomic graph wiring, dependency-first lifecycle ordering, and setup/run access contexts.
 
 ## 0.2.0 — 2026-08-15
 

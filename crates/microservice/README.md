@@ -66,3 +66,9 @@ Override `setup_with_context` to use dependencies. Override `run_with_context` t
 use dependencies or references. Provider values are owned and cloned, preserving
 `Send + 'static` lifecycle futures. Dependency cycles fail before initialization;
 reference cycles are allowed and do not affect lifecycle order.
+
+Calling `run` seals the composition. All bindings and provider factories are
+validated and staged before initialization, so a wiring or provider error starts
+no lifecycle callback. Named instances are ordered by the dependency graph with
+stable IDs as the tie-breaker; teardown, shutdown, and cleanup use the exact
+reverse order.

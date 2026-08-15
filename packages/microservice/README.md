@@ -11,6 +11,10 @@ import {
 	type MicroserviceContext,
 	MicroserviceModule,
 	ModuleKind,
+	port,
+	provide,
+	dependency,
+	type SetupContext,
 } from '@microde/microservice';
 
 class Task extends MicroserviceModule {
@@ -52,6 +56,7 @@ class OrdersModule extends MicroserviceModule {
 	readonly kind = ModuleKind.Passive;
 	readonly database = dependency('database', databasePort);
 	readonly relationships = [this.database];
+	readonly providers = [provide(port('orders'), 'ready')];
 
 	async setup(context: SetupContext) {
 		context.use(this.database);

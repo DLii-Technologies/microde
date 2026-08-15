@@ -11,16 +11,27 @@ title: Core concepts
 
 ## Modules
 
-Every module owns one focused part of a service and implements six lifecycle methods:
+Every module owns one focused part of a service and implements lifecycle methods:
 
 1. `initialize` acquires resources needed to configure the module.
 2. `setup` connects the initialized module to the service.
 3. `run` performs the module's work.
-4. `teardown` reverses setup.
-5. `shutdown` releases initialized resources.
-6. `cleanup` performs final cleanup in every execution path.
+4. `stop` asks running work to finish.
+5. `teardown` reverses setup.
+6. `shutdown` releases initialized resources.
+7. `cleanup` performs final cleanup in every execution path.
 
-Initialization and setup proceed in installation order. Teardown, shutdown, and cleanup proceed in reverse installation order.
+For named compositions, dependency providers initialize and set up before consumers. Run callbacks start in the same deterministic order but remain concurrent. Stop is dispatched in reverse order; teardown, shutdown, and cleanup run sequentially in reverse order. Unrelated modules use stable instance IDs as the tie-breaker.
+
+## Composition and module identity
+
+Named installation returns an opaque `ModuleHandle` for one exact installed instance. Handles do not expose module objects. Stable IDs must be unique within a service and make ordering independent of installation order.
+
+Modules declare `Dependency` and `Reference` slots against nominal runtime `Port` tokens and export owned contract values through providers. `Microservice.bind()` binds every slot to an exact installed handle; providers are never selected implicitly by type.
+
+Calling `run()` seals composition. Microde validates all bindings, rejects dependency cycles, computes lifecycle order, stages providers, and atomically publishes the complete resolution table before initialization. Invalid composition starts no lifecycle callback.
+
+Dependencies form the lifecycle DAG and are available through `SetupContext` and `RunContext`. References do not affect lifecycle order, may form cycles, and are available only through `RunContext`.
 
 ## Module context
 
@@ -37,7 +48,7 @@ A module declares `ModuleKind.Passive` when its `run()` promise completes on its
 
 ## Active modules
 
-A module declares `ModuleKind.Active` when it represents a long-running component. If an active module finishes, a passive module fails, or the service receives a stop request, Microde asks every module to stop in reverse installation order before unwinding the lifecycle.
+A module declares `ModuleKind.Active` when it represents a long-running component. If an active module finishes, a passive module fails, or the service receives a stop request, Microde asks every module to stop in reverse lifecycle order before unwinding the lifecycle.
 
 The active module's `stop()` implementation should cause its `run()` promise to settle.
 
