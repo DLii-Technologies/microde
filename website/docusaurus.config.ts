@@ -10,8 +10,11 @@ const config: Config = {
 		v4: true,
 	},
 
-	url: 'https://microde.dlii.tech',
-	baseUrl: '/',
+	url: 'https://dlii-technologies.github.io',
+	baseUrl: '/microde/',
+	organizationName: 'DLii-Technologies',
+	projectName: 'microde',
+	trailingSlash: false,
 
 	// Rustdoc is generated into the static directory during the build, so
 	// Docusaurus cannot discover its routes during the Markdown link pass.
