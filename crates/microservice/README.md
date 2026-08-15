@@ -1,5 +1,7 @@
 # Microde microservice runtime
 
+[![code coverage](https://codecov.io/gh/DLii-Technologies/microde/graph/badge.svg?component=rust-microservice)](https://codecov.io/gh/DLii-Technologies/microde)
+
 `microde-microservice` is the Rust implementation of Microde's composition and
 lifecycle runtime. It installs passive and active modules, coordinates their
 asynchronous lifecycle hooks, supports orderly stop requests, and reports a
