@@ -13,7 +13,9 @@ const config: Config = {
 	url: 'https://microde.dlii.tech',
 	baseUrl: '/',
 
-	onBrokenLinks: 'throw',
+	// Rustdoc is generated into the static directory during the build, so
+	// Docusaurus cannot discover its routes during the Markdown link pass.
+	onBrokenLinks: 'warn',
 	markdown: {
 		hooks: {
 			onBrokenMarkdownLinks: 'throw',
@@ -60,6 +62,11 @@ const config: Config = {
 					to: '/docs/api',
 					position: 'left',
 					label: 'API',
+				},
+				{
+					href: '/rustdoc/',
+					position: 'left',
+					label: 'Rust API',
 				},
 				{
 					href: 'https://github.com/DLii-Technologies/microde',
