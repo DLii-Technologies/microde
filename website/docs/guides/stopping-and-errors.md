@@ -6,13 +6,13 @@ title: Stopping and errors
 
 ## Request an orderly stop
 
-Call `stop()` after execution has started. It requests an orderly unwind and returns the same execution promise as `run()`:
+Call `stop()` after execution has started. It requests an orderly unwind. Await the promise returned by `run()` to receive the final result:
 
 ```ts
 const execution = service.run();
 
 process.once('SIGTERM', () => {
-	void service.stop();
+	service.stop();
 });
 
 const result = await execution;
@@ -22,9 +22,9 @@ process.exitCode = result.exitCode;
 You can request a particular exit code, associate an error with the stop, or provide both:
 
 ```ts
-void service.stop(2);
-void service.stop(new Error('lost connection'));
-void service.stop(2, new Error('invalid configuration'));
+service.stop(2);
+service.stop(new Error('lost connection'));
+service.stop(2, new Error('invalid configuration'));
 ```
 
 Only the first stop request supplies the requested exit code and error. Calling `stop()` before the service starts throws.

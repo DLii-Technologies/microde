@@ -37,7 +37,7 @@ class WorkerModule extends ActiveMicroserviceModule {
 const service = new Microservice();
 service.install((context) => new WorkerModule(context));
 
-process.once('SIGTERM', () => void service.stop());
+process.once('SIGTERM', () => service.stop());
 
 const result = await service.run();
 process.exitCode = result.exitCode;
