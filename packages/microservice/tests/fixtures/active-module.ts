@@ -1,9 +1,9 @@
-import type { Microservice } from '@microde/microservice';
+import type { MicroserviceContext } from '@microde/microservice';
 import { ActiveMicroserviceModule } from '@microde/microservice';
 
 export class ActiveModule extends ActiveMicroserviceModule {
 	constructor(
-		microservice: Microservice,
+		context: MicroserviceContext,
 		events: string[],
 		name?: string,
 		private readonly completion: Promise<void> = Promise.resolve(),
@@ -12,7 +12,7 @@ export class ActiveModule extends ActiveMicroserviceModule {
 		private readonly stopCompletion: Promise<void> = Promise.resolve(),
 		private readonly onCompletion: () => void = () => {},
 	) {
-		super(microservice);
+		super(context);
 		this.events = events;
 		this.name = name;
 	}

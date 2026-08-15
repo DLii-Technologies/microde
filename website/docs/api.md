@@ -8,6 +8,7 @@ description: TypeScript API reference for @microde/microservice.
 The API reference is generated from the public TypeScript exports and their TSDoc comments.
 
 - [`Microservice`](./api-reference/classes/Microservice.md) coordinates installed modules.
+- [`MicroserviceContext`](./api-reference/interfaces/MicroserviceContext.md) defines the `stop()` and `panic()` operations available to modules.
 - [`MicroserviceState`](./api-reference/enumerations/MicroserviceState.md) describes the observable lifecycle state.
 - [`MicroserviceExecutionResult`](./api-reference/interfaces/MicroserviceExecutionResult.md) reports the final outcome.
 - [`PassiveMicroserviceModule`](./api-reference/classes/PassiveMicroserviceModule.md) is the base class for finite work.

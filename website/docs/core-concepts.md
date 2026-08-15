@@ -22,6 +22,15 @@ Every module owns one focused part of a service and implements six lifecycle met
 
 Initialization and setup proceed in installation order. Teardown, shutdown, and cleanup proceed in reverse installation order.
 
+## Module context
+
+Every module receives a `MicroserviceContext` through its constructor. The base module exposes it as the read-only `context` property. The context deliberately contains only the service operations a module needs:
+
+- `stop()` requests an orderly stop and supports an optional exit code, error, or both.
+- `panic()` terminates immediately when normal lifecycle cleanup would be unsafe.
+
+`Microservice` implements this contract, but modules should accept `MicroserviceContext` rather than depend on the concrete lifecycle coordinator. This keeps modules focused and makes them easier to test with a minimal context substitute.
+
 ## Passive modules
 
 A `PassiveMicroserviceModule` performs work whose `run()` promise completes on its own. When a service has only passive modules, it begins unwinding after every module settles.

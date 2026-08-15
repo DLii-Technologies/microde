@@ -1,7 +1,7 @@
-import type { Microservice } from './microservice.js';
+import type { MicroserviceContext } from './microservice-context.js';
 
 /**
- * Defines the lifecycle shared by every module installed in a {@link Microservice}.
+ * Defines the lifecycle shared by every module installed in a microservice.
  *
  * Lifecycle methods run in phase order. Initialization and setup run in installation
  * order, while teardown, shutdown, and cleanup run in reverse installation order.
@@ -9,8 +9,8 @@ import type { Microservice } from './microservice.js';
  * instead of extending this class directly.
  */
 export abstract class MicroserviceModule {
-	/** Creates a module owned by the supplied microservice. */
-	constructor(public readonly microservice: Microservice) {}
+	/** Creates a module with access to the supplied microservice context. */
+	constructor(public readonly context: MicroserviceContext) {}
 
 	/** Acquires resources needed to configure the module. */
 	async initialize(): Promise<void> {}

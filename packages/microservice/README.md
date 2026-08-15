@@ -6,22 +6,30 @@
 The core driver for Microde service composition and lifecycle management.
 
 ```ts
-import { Microservice, PassiveMicroserviceModule } from '@microde/microservice';
+import {
+	Microservice,
+	type MicroserviceContext,
+	PassiveMicroserviceModule,
+} from '@microde/microservice';
 
 class Task extends PassiveMicroserviceModule {
-	async initialize() {}
-	async setup() {}
-	async run() {}
-	async teardown() {}
-	async shutdown() {}
-	async cleanup() {}
+	constructor(context: MicroserviceContext) {
+		super(context);
+	}
+
+	async run(): Promise<void> {
+		console.log('Task complete');
+	}
 }
 
 const service = new Microservice();
-service.install((microservice) => new Task(microservice));
+service.install((context) => new Task(context));
 
 const result = await service.run();
 process.exitCode = result.exitCode;
 ```
+
+Modules depend on `MicroserviceContext`, the narrow `stop()` and `panic()`
+contract implemented by `Microservice`.
 
 See the documentation in the repository for lifecycle guides and the complete API reference.

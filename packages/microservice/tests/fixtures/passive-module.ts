@@ -1,12 +1,15 @@
-import { Microservice, PassiveMicroserviceModule } from '@microde/microservice';
+import {
+	type MicroserviceContext,
+	PassiveMicroserviceModule,
+} from '@microde/microservice';
 
 export class PassiveModule extends PassiveMicroserviceModule {
 	constructor(
-		microservice: Microservice,
+		context: MicroserviceContext,
 		protected readonly events: string[],
 		protected readonly name?: string,
 	) {
-		super(microservice);
+		super(context);
 	}
 
 	protected record(event: string): void {

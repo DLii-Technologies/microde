@@ -20,23 +20,24 @@ Microde is published as an ECMAScript module and includes TypeScript declaration
 Create a module, install it in a service, and run the service:
 
 ```ts
-import { Microservice, PassiveMicroserviceModule } from '@microde/microservice';
+import {
+	Microservice,
+	type MicroserviceContext,
+	PassiveMicroserviceModule,
+} from '@microde/microservice';
 
 class GreetingModule extends PassiveMicroserviceModule {
-	async initialize(): Promise<void> {}
-	async setup(): Promise<void> {}
+	constructor(context: MicroserviceContext) {
+		super(context);
+	}
 
 	async run(): Promise<void> {
 		console.log('Hello from Microde');
 	}
-
-	async teardown(): Promise<void> {}
-	async shutdown(): Promise<void> {}
-	async cleanup(): Promise<void> {}
 }
 
 const service = new Microservice();
-service.install((microservice) => new GreetingModule(microservice));
+service.install((context) => new GreetingModule(context));
 
 const result = await service.run();
 
@@ -53,6 +54,8 @@ returned in the execution result after cleanup completes.
 
 Use `PassiveMicroserviceModule` for work that finishes on its own. Use
 `ActiveMicroserviceModule` for long-running components that implement `stop()`.
+Modules receive a `MicroserviceContext`, which exposes only the `stop()` and
+`panic()` operations they need from their owning service.
 
 ## Documentation
 
