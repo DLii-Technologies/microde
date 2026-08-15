@@ -1,5 +1,11 @@
 # @microde/microservice
 
+## 0.4.0 — 2026-08-15
+
+### Minor changes
+
+- [be8f4a2](https://github.com/DLii-Technologies/microde/commit/be8f4a2f21884938c410cf0bb4258a3bff18edb5) Switch to unified MicroserviceModule with explicit kind constant. — Thanks @SirDavidLudwig!
+
 ## 0.3.0
 
 ### Minor Changes
