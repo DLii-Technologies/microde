@@ -1,12 +1,15 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
-	ActiveMicroserviceModule,
 	Microservice,
 	type MicroserviceContext,
+	MicroserviceModule,
 	ModuleKind,
-	PassiveMicroserviceModule,
 } from '@microde/microservice';
+
+class NoOpModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+}
 
 describe('Microservice Modules', () => {
 	it('depends only on the microservice context contract', () => {
@@ -16,7 +19,7 @@ describe('Microservice Modules', () => {
 				throw new Error('panic');
 			}),
 		};
-		const module = new (class extends PassiveMicroserviceModule {
+		const module = new (class extends NoOpModule {
 			usesContext(candidate: MicroserviceContext): boolean {
 				return this.context === candidate;
 			}
@@ -45,31 +48,19 @@ describe('Microservice Modules', () => {
 			context.stop;
 			// @ts-expect-error Module contexts cannot inspect global state.
 			context.state;
-			return new (class extends PassiveMicroserviceModule {})(context);
+			return new NoOpModule(context);
 		};
 
 		expectTypeOf(factory).toMatchTypeOf<Factory>();
 	});
 
-	it('provides a default no-op lifecycle for passive modules', async () => {
-		const microservice = new Microservice();
-		microservice.install(
-			(instance) =>
-				new (class extends PassiveMicroserviceModule {})(instance),
-		);
-
-		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
-	});
-
-	it('only requires run and stop for active modules', async () => {
+	it('requires modules to declare their kind and defaults run and stop to no-ops', async () => {
 		const microservice = new Microservice();
 		const module = microservice.install(
-			(instance) =>
-				new (class extends ActiveMicroserviceModule {
-					async run(): Promise<void> {}
-
-					async stop(): Promise<void> {}
-				})(instance),
+			(context) =>
+				new (class extends MicroserviceModule {
+					readonly kind = ModuleKind.Active;
+				})(context),
 		);
 
 		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });

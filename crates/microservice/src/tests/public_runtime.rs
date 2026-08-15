@@ -45,16 +45,13 @@ impl FailingModule {
 }
 
 impl MicroserviceModule for FailingModule {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn initialize(&mut self) -> ModuleFuture {
         Self::result("initialize", self.initialize)
     }
 
     fn setup(&mut self) -> ModuleFuture {
         Self::result("setup", self.setup)
-    }
-
-    fn run(&mut self) -> ModuleFuture {
-        Self::result("run", self.run)
     }
 
     fn teardown(&mut self) -> ModuleFuture {
@@ -68,17 +65,23 @@ impl MicroserviceModule for FailingModule {
     fn cleanup(&mut self) -> ModuleFuture {
         Self::result("cleanup", self.cleanup)
     }
+
+    fn run(&mut self) -> ModuleFuture {
+        Self::result("run", self.run)
+    }
+
+    fn stop(&mut self) -> ModuleFuture {
+        Self::result("stop", false)
+    }
 }
 
 struct StopFailingActive;
 
 impl MicroserviceModule for StopFailingActive {
+    const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         Box::pin(std::future::pending())
     }
-}
-
-impl ActiveMicroserviceModule for StopFailingActive {
     fn stop(&mut self) -> ModuleFuture {
         Box::pin(async { Err(MicroserviceError::new("stop failed")) })
     }
@@ -95,6 +98,7 @@ impl StoppableActive {
 }
 
 impl MicroserviceModule for StoppableActive {
+    const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         let completion = self.completion.take().unwrap();
         Box::pin(async move {
@@ -102,9 +106,6 @@ impl MicroserviceModule for StoppableActive {
             Ok(())
         })
     }
-}
-
-impl ActiveMicroserviceModule for StoppableActive {
     fn stop(&mut self) -> ModuleFuture {
         let release = self.release.take();
         Box::pin(async move {
@@ -183,7 +184,7 @@ fn stop_before_run_is_rejected() {
 #[test]
 fn stop_can_wait_for_an_owned_run_future_and_first_request_wins() {
     let mut service = service();
-    service.install_active(|_| StoppableActive::new()).unwrap();
+    service.install(|_| StoppableActive::new()).unwrap();
 
     let run = service.run();
     let first_stop = service.stop(MicroserviceStopRequest::with_exit_code(7));
@@ -206,7 +207,7 @@ fn stop_can_wait_for_an_owned_run_future_and_first_request_wins() {
 fn initialization_and_setup_failures_are_returned_after_unwind() {
     let mut initialization_service = service();
     initialization_service
-        .install_passive(|_| FailingModule {
+        .install(|_| FailingModule {
             initialize: true,
             ..FailingModule::default()
         })
@@ -220,7 +221,7 @@ fn initialization_and_setup_failures_are_returned_after_unwind() {
 
     let mut setup_service = service();
     setup_service
-        .install_passive(|_| FailingModule {
+        .install(|_| FailingModule {
             setup: true,
             ..FailingModule::default()
         })
@@ -237,7 +238,7 @@ fn initialization_and_setup_failures_are_returned_after_unwind() {
 fn execution_and_active_stop_failures_use_their_runtime_priorities() {
     let mut execution_service = service();
     execution_service
-        .install_passive(|_| FailingModule {
+        .install(|_| FailingModule {
             run: true,
             ..FailingModule::default()
         })
@@ -249,7 +250,7 @@ fn execution_and_active_stop_failures_use_their_runtime_priorities() {
     );
 
     let mut stop_service = service();
-    stop_service.install_active(|_| StopFailingActive).unwrap();
+    stop_service.install(|_| StopFailingActive).unwrap();
     let run = stop_service.run();
     wait_for_state(&stop_service, MicroserviceState::Running);
     let stop = stop_service.stop(MicroserviceStopRequest::success());
@@ -267,7 +268,7 @@ fn execution_and_active_stop_failures_use_their_runtime_priorities() {
 fn every_unwind_failure_is_retained_in_lifecycle_sequence() {
     let mut service = service();
     service
-        .install_passive(|_| FailingModule {
+        .install(|_| FailingModule {
             teardown: true,
             shutdown: true,
             cleanup: true,
@@ -296,7 +297,7 @@ fn every_unwind_failure_is_retained_in_lifecycle_sequence() {
 #[test]
 fn a_stop_request_error_has_highest_priority_in_the_final_result() {
     let mut service = service();
-    service.install_active(|_| StoppableActive::new()).unwrap();
+    service.install(|_| StoppableActive::new()).unwrap();
 
     let run = service.run();
     let stop_error = MicroserviceError::new("requested failure");

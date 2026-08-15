@@ -9,10 +9,13 @@ The core driver for Microde service composition and lifecycle management.
 import {
 	Microservice,
 	type MicroserviceContext,
-	PassiveMicroserviceModule,
+	MicroserviceModule,
+	ModuleKind,
 } from '@microde/microservice';
 
-class Task extends PassiveMicroserviceModule {
+class Task extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+
 	constructor(context: MicroserviceContext) {
 		super(context);
 	}
@@ -20,6 +23,8 @@ class Task extends PassiveMicroserviceModule {
 	async run(): Promise<void> {
 		console.log('Task complete');
 	}
+
+	async stop(): Promise<void> {}
 }
 
 const service = new Microservice();

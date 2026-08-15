@@ -1,4 +1,4 @@
-use crate::{ActiveMicroserviceModule, MicroserviceModule, ModuleFuture, ModuleKind};
+use crate::{MicroserviceModule, ModuleFuture, ModuleKind, module::RuntimeModule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ModuleStage {
@@ -17,98 +17,50 @@ pub(crate) enum ModuleStage {
     CleanedUp,
 }
 
-pub(crate) enum InstalledModule {
-    Passive {
-        module: Box<dyn MicroserviceModule>,
-        stage: ModuleStage,
-    },
-    Active {
-        module: Box<dyn ActiveMicroserviceModule>,
-        stage: ModuleStage,
-    },
+pub(crate) struct InstalledModule {
+    kind: ModuleKind,
+    module: Box<dyn RuntimeModule>,
+    stage: ModuleStage,
 }
 
 impl InstalledModule {
-    pub(crate) fn passive(module: impl MicroserviceModule + 'static) -> Self {
-        Self::Passive {
-            module: Box::new(module),
-            stage: ModuleStage::Installed,
-        }
-    }
-
-    pub(crate) fn active(module: impl ActiveMicroserviceModule + 'static) -> Self {
-        Self::Active {
+    pub(crate) fn new<Module: MicroserviceModule + 'static>(module: Module) -> Self {
+        Self {
+            kind: Module::KIND,
             module: Box::new(module),
             stage: ModuleStage::Installed,
         }
     }
 
     pub(crate) fn kind(&self) -> ModuleKind {
-        match self {
-            Self::Passive { .. } => ModuleKind::Passive,
-            Self::Active { .. } => ModuleKind::Active,
-        }
+        self.kind
     }
-
     pub(crate) fn stage(&self) -> ModuleStage {
-        match self {
-            Self::Passive { stage, .. } | Self::Active { stage, .. } => *stage,
-        }
+        self.stage
     }
-
     pub(crate) fn set_stage(&mut self, next_stage: ModuleStage) {
-        match self {
-            Self::Passive { stage, .. } | Self::Active { stage, .. } => *stage = next_stage,
-        }
+        self.stage = next_stage;
     }
-
     pub(crate) fn initialize(&mut self) -> ModuleFuture {
-        match self {
-            Self::Passive { module, .. } => module.initialize(),
-            Self::Active { module, .. } => module.initialize(),
-        }
+        self.module.initialize()
     }
-
     pub(crate) fn setup(&mut self) -> ModuleFuture {
-        match self {
-            Self::Passive { module, .. } => module.setup(),
-            Self::Active { module, .. } => module.setup(),
-        }
+        self.module.setup()
     }
-
     pub(crate) fn run(&mut self) -> ModuleFuture {
-        match self {
-            Self::Passive { module, .. } => module.run(),
-            Self::Active { module, .. } => module.run(),
-        }
+        self.module.run()
     }
-
-    pub(crate) fn stop(&mut self) -> Option<ModuleFuture> {
-        match self {
-            Self::Passive { .. } => None,
-            Self::Active { module, .. } => Some(module.stop()),
-        }
+    pub(crate) fn stop(&mut self) -> ModuleFuture {
+        self.module.stop()
     }
-
     pub(crate) fn teardown(&mut self) -> ModuleFuture {
-        match self {
-            Self::Passive { module, .. } => module.teardown(),
-            Self::Active { module, .. } => module.teardown(),
-        }
+        self.module.teardown()
     }
-
     pub(crate) fn shutdown(&mut self) -> ModuleFuture {
-        match self {
-            Self::Passive { module, .. } => module.shutdown(),
-            Self::Active { module, .. } => module.shutdown(),
-        }
+        self.module.shutdown()
     }
-
     pub(crate) fn cleanup(&mut self) -> ModuleFuture {
-        match self {
-            Self::Passive { module, .. } => module.cleanup(),
-            Self::Active { module, .. } => module.cleanup(),
-        }
+        self.module.cleanup()
     }
 }
 

@@ -1,9 +1,12 @@
 import {
 	type MicroserviceContext,
-	PassiveMicroserviceModule,
+	MicroserviceModule,
+	ModuleKind,
 } from '@microde/microservice';
 
-export class PassiveModule extends PassiveMicroserviceModule {
+export class PassiveModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+
 	constructor(
 		context: MicroserviceContext,
 		protected readonly events: string[],
@@ -27,6 +30,8 @@ export class PassiveModule extends PassiveMicroserviceModule {
 	async run(): Promise<void> {
 		this.record('run');
 	}
+
+	async stop(): Promise<void> {}
 
 	async teardown(): Promise<void> {
 		this.record('teardown');

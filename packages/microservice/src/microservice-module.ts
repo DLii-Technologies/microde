@@ -11,8 +11,7 @@ export enum ModuleKind {
  *
  * Lifecycle methods run in phase order. Initialization and setup run in installation
  * order, while teardown, shutdown, and cleanup run in reverse installation order.
- * Extend {@link PassiveMicroserviceModule} or {@link ActiveMicroserviceModule}
- * instead of extending this class directly.
+ * Each module declares its kind and can override the default no-op `run` and `stop`.
  */
 export abstract class MicroserviceModule {
 	abstract readonly kind: ModuleKind;
@@ -26,8 +25,11 @@ export abstract class MicroserviceModule {
 	/** Connects the initialized module to the rest of the service. */
 	async setup(): Promise<void> {}
 
-	/** Performs the module's work. */
-	abstract run(): Promise<void>;
+	/** Performs the module's work. Does nothing by default. */
+	async run(): Promise<void> {}
+
+	/** Requests that the module finish or release its running work. Does nothing by default. */
+	async stop(): Promise<void> {}
 
 	/** Reverses work performed during setup. */
 	async teardown(): Promise<void> {}
@@ -37,29 +39,4 @@ export abstract class MicroserviceModule {
 
 	/** Performs final cleanup, including when an earlier lifecycle phase failed. */
 	async cleanup(): Promise<void> {}
-}
-
-/**
- * A module whose `run` method completes on its own.
- *
- * A microservice containing only passive modules finishes after every module's
- * `run` promise settles.
- */
-export abstract class PassiveMicroserviceModule extends MicroserviceModule {
-	readonly kind = ModuleKind.Passive;
-
-	/** Performs no work by default. */
-	async run(): Promise<void> {}
-}
-
-/**
- * A long-running module that can be asked to stop.
- *
- * When execution ends, active modules are stopped in reverse installation order.
- */
-export abstract class ActiveMicroserviceModule extends MicroserviceModule {
-	readonly kind = ModuleKind.Active;
-
-	/** Requests that the running module finish its `run` operation. */
-	abstract stop(): Promise<void>;
 }

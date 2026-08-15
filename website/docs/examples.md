@@ -10,12 +10,15 @@ An active module keeps its `run()` promise pending until `stop()` releases it:
 
 ```ts
 import {
-	ActiveMicroserviceModule,
 	Microservice,
 	type MicroserviceContext,
+	MicroserviceModule,
+	ModuleKind,
 } from '@microde/microservice';
 
-class WorkerModule extends ActiveMicroserviceModule {
+class WorkerModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Active;
+
 	private finish!: () => void;
 	private readonly completion = new Promise<void>((resolve) => {
 		this.finish = resolve;

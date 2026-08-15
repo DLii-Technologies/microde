@@ -1,5 +1,4 @@
 import {
-	ActiveMicroserviceModule,
 	ModuleKind,
 	type MicroserviceModule,
 } from './microservice-module.js';
@@ -50,8 +49,8 @@ type ModuleExecutionOutcome =
 	| { readonly status: 'fulfilled' }
 	| { readonly status: 'rejected'; readonly error: unknown };
 
-interface ActiveModuleRun {
-	readonly module: ActiveMicroserviceModule;
+interface ModuleRun {
+	readonly module: MicroserviceModule;
 	readonly completion: Promise<ModuleExecutionOutcome>;
 }
 
@@ -333,8 +332,9 @@ export class Microservice {
 	private async executeModules(
 		recordError: (error: unknown, priority?: ErrorPriority) => void,
 	): Promise<void> {
-		const activeRuns: ActiveModuleRun[] = [];
+		const activeRuns: ModuleRun[] = [];
 		const passiveRuns: Promise<ModuleExecutionOutcome>[] = [];
+		const moduleRuns: ModuleRun[] = [];
 
 		for (const installedModule of this.modules) {
 			const completion = this.startModuleExecution(
@@ -342,17 +342,29 @@ export class Microservice {
 				(error) => recordError(error, ErrorPriority.Execution),
 			);
 
+			const moduleRun = { module: installedModule.module, completion };
+			moduleRuns.push(moduleRun);
 			if (installedModule.module.kind === ModuleKind.Active) {
-				activeRuns.push({
-					module: installedModule.module as ActiveMicroserviceModule,
-					completion,
-				});
+				activeRuns.push(moduleRun);
 			} else {
 				passiveRuns.push(completion);
 			}
 		}
 
 		if (activeRuns.length === 0) {
+			await Promise.race([
+				this.stopRequest,
+				Promise.all(passiveRuns),
+				...passiveRuns.map(
+					(completion) =>
+						new Promise<void>((resolve) => {
+							void completion.then((outcome) => {
+								if (outcome.status === 'rejected') resolve();
+							});
+						}),
+				),
+			]);
+			await this.stopModules(moduleRuns, recordError);
 			await Promise.all(passiveRuns);
 			return;
 		}
@@ -369,25 +381,29 @@ export class Microservice {
 			}
 		});
 
-		const stoppedRuns = await this.stopActiveModules(
-			activeRuns,
+		const stoppedRuns = await this.stopModules(
+			moduleRuns,
 			recordError,
 		);
 
-		await Promise.all(stoppedRuns.map(({ completion }) => completion));
+		await Promise.all(
+			stoppedRuns
+				.filter(({ module }) => module.kind === ModuleKind.Active)
+				.map(({ completion }) => completion),
+		);
 		await Promise.all(passiveRuns);
 	}
 
-	private async stopActiveModules(
-		activeRuns: readonly ActiveModuleRun[],
+	private async stopModules(
+		moduleRuns: readonly ModuleRun[],
 		recordError: (error: unknown, priority?: ErrorPriority) => void,
-	): Promise<ActiveModuleRun[]> {
-		const reversedRuns = [...activeRuns].reverse();
+	): Promise<ModuleRun[]> {
+		const reversedRuns = [...moduleRuns].reverse();
 		const stopPromises = reversedRuns.map(({ module }) =>
 			this.stopModule(module),
 		);
 		const stopResults = await Promise.allSettled(stopPromises);
-		const stoppedRuns: ActiveModuleRun[] = [];
+		const stoppedRuns: ModuleRun[] = [];
 
 		for (const [index, stopResult] of stopResults.entries()) {
 			if (stopResult.status === 'rejected') {
@@ -400,7 +416,7 @@ export class Microservice {
 		return stoppedRuns;
 	}
 
-	private stopModule(module: ActiveMicroserviceModule): Promise<void> {
+	private stopModule(module: MicroserviceModule): Promise<void> {
 		return Promise.resolve().then(() => module.stop());
 	}
 

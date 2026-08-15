@@ -23,10 +23,13 @@ Create a module, install it in a service, and run the service:
 import {
 	Microservice,
 	type MicroserviceContext,
-	PassiveMicroserviceModule,
+	MicroserviceModule,
+	ModuleKind,
 } from '@microde/microservice';
 
-class GreetingModule extends PassiveMicroserviceModule {
+class GreetingModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+
 	constructor(context: MicroserviceContext) {
 		super(context);
 	}
@@ -34,6 +37,8 @@ class GreetingModule extends PassiveMicroserviceModule {
 	async run(): Promise<void> {
 		console.log('Hello from Microde');
 	}
+
+	async stop(): Promise<void> {}
 }
 
 const service = new Microservice();
@@ -52,8 +57,8 @@ A service initializes and sets up modules in installation order, then tears them
 down, shuts them down, and cleans them up in reverse order. Lifecycle failures are
 returned in the execution result after cleanup completes.
 
-Use `PassiveMicroserviceModule` for work that finishes on its own. Use
-`ActiveMicroserviceModule` for long-running components that implement `stop()`.
+Declare `ModuleKind.Passive` for work whose `run()` finishes on its own and
+`ModuleKind.Active` for work whose `run()` finishes only after `stop()`.
 Modules receive a `MicroserviceContext`, which exposes only the `requestStop()` and
 `panic()` operations they need from their owning service.
 

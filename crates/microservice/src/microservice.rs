@@ -11,13 +11,12 @@ use crate::runtime::{
     ErrorPriority, ErrorRecorder, InstalledModule, ModuleStage, RuntimeContext, RuntimeControl,
     spawn, terminate_process,
 };
-use crate::{
-    ActiveMicroserviceModule, MicroserviceContextHandle, MicroserviceError,
-    MicroserviceExecutionResult, MicroserviceModule, MicroserviceState, MicroserviceStopRequest,
-    ModuleKind,
-};
 #[cfg(test)]
 use crate::{MicroserviceContext, ModuleFuture};
+use crate::{
+    MicroserviceContextHandle, MicroserviceError, MicroserviceExecutionResult, MicroserviceModule,
+    MicroserviceState, MicroserviceStopRequest, ModuleKind,
+};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModuleExecutionErrors {
@@ -91,10 +90,7 @@ impl Microservice {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub fn install_passive<Module, Factory>(
-        &mut self,
-        factory: Factory,
-    ) -> Result<(), MicroserviceError>
+    pub fn install<Module, Factory>(&mut self, factory: Factory) -> Result<(), MicroserviceError>
     where
         Module: MicroserviceModule + 'static,
         Factory: FnOnce(MicroserviceContextHandle) -> Module,
@@ -110,30 +106,7 @@ impl Microservice {
             drop(reset);
             module
         };
-        self.modules.push(InstalledModule::passive(module));
-        Ok(())
-    }
-
-    pub fn install_active<Module, Factory>(
-        &mut self,
-        factory: Factory,
-    ) -> Result<(), MicroserviceError>
-    where
-        Module: ActiveMicroserviceModule + 'static,
-        Factory: FnOnce(MicroserviceContextHandle) -> Module,
-    {
-        match self.ensure_installable() {
-            Ok(()) => {}
-            Err(error) => return Err(error),
-        }
-        self.set_state(MicroserviceState::Installing);
-        let module = {
-            let reset = InstallationStateReset(self.current_state.clone());
-            let module = factory(self.context.clone());
-            drop(reset);
-            module
-        };
-        self.modules.push(InstalledModule::active(module));
+        self.modules.push(InstalledModule::new(module));
         Ok(())
     }
 
@@ -305,10 +278,6 @@ impl Microservice {
 
     pub(crate) async fn execute_modules(&mut self) -> ModuleExecutionErrors {
         let mut errors = ModuleExecutionErrors::default();
-        let has_active = self
-            .modules
-            .iter()
-            .any(|module| module.kind() == ModuleKind::Active);
         let mut runs: FuturesUnordered<ModuleRunFuture> = FuturesUnordered::new();
 
         for (index, installed) in self.modules.iter_mut().enumerate() {
@@ -318,13 +287,6 @@ impl Microservice {
             runs.push(Box::pin(async move { (index, kind, run.await) }));
         }
 
-        if !has_active {
-            while let Some(outcome) = runs.next().await {
-                self.record_run_completion(outcome, &mut errors);
-            }
-            return errors;
-        }
-
         let stop_signal = self.control.take_stop_receiver().fuse();
         futures::pin_mut!(stop_signal);
 
@@ -332,8 +294,9 @@ impl Microservice {
             futures::select_biased! {
                 _ = stop_signal => break,
                 outcome = runs.next().fuse() => {
-                    let (index, kind, result) = outcome
-                        .expect("an installed active module keeps the run stream open");
+                    let Some((index, kind, result)) = outcome else {
+                        break;
+                    };
                     let should_stop = kind == ModuleKind::Active || result.is_err();
                     self.record_run_completion((index, kind, result), &mut errors);
                     if should_stop {
@@ -343,18 +306,16 @@ impl Microservice {
             }
         }
 
-        let active_indexes = self
+        let module_indexes = self
             .modules
             .iter()
             .enumerate()
             .rev()
-            .filter_map(|(index, module)| (module.kind() == ModuleKind::Active).then_some(index))
+            .map(|(index, _)| index)
             .collect::<Vec<_>>();
-        let mut stop_futures = Vec::with_capacity(active_indexes.len());
-        for index in active_indexes {
-            let stop = self.modules[index]
-                .stop()
-                .expect("active installed modules always provide stop");
+        let mut stop_futures = Vec::with_capacity(module_indexes.len());
+        for index in module_indexes {
+            let stop = self.modules[index].stop();
             stop_futures.push(async move { (index, stop.await) });
         }
 
