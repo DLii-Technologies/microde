@@ -188,21 +188,15 @@ export class Microservice implements MicroserviceContext {
 		process.exit(1);
 	}
 
-	/** Requests an orderly stop and resolves with the existing execution result. */
-	stop(): Promise<MicroserviceExecutionResult>;
+	/** Requests an orderly stop. */
+	stop(): void;
 	/** Requests an orderly stop with a specific exit code. */
-	stop(exitCode: number): Promise<MicroserviceExecutionResult>;
+	stop(exitCode: number): void;
 	/** Requests an orderly stop caused by an error. */
-	stop(error: unknown): Promise<MicroserviceExecutionResult>;
+	stop(error: unknown): void;
 	/** Requests an orderly stop with both an exit code and error. */
-	stop(
-		exitCode: number,
-		error: unknown,
-	): Promise<MicroserviceExecutionResult>;
-	stop(
-		exitCodeOrError?: number | unknown,
-		error?: unknown,
-	): Promise<MicroserviceExecutionResult> {
+	stop(exitCode: number, error: unknown): void;
+	stop(exitCodeOrError?: number | unknown, error?: unknown): void {
 		if (
 			this.currentState === MicroserviceState.Idle ||
 			this.currentState === MicroserviceState.Installing
@@ -222,8 +216,6 @@ export class Microservice implements MicroserviceContext {
 			}
 			this.resolveStopRequest();
 		}
-
-		return this.execution!;
 	}
 
 	private async executeLifecycle(): Promise<MicroserviceExecutionResult> {
