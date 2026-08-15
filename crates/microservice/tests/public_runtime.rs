@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::executor::block_on;
 use microde_microservice::{
@@ -113,6 +113,12 @@ fn dropping_the_completion_future_does_not_cancel_the_lifecycle() {
     drop(service.run());
 
     receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while service.state() != MicroserviceState::Finished && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+
     assert_eq!(service.state(), MicroserviceState::Finished);
 }
 
