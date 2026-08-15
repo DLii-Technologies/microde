@@ -11,10 +11,13 @@ Create a passive module for a finite task, install it, and run the service:
 import {
 	Microservice,
 	type MicroserviceContext,
-	PassiveMicroserviceModule,
+	MicroserviceModule,
+	ModuleKind,
 } from '@microde/microservice';
 
-class GreetingModule extends PassiveMicroserviceModule {
+class GreetingModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+
 	constructor(context: MicroserviceContext) {
 		super(context);
 	}
@@ -22,6 +25,8 @@ class GreetingModule extends PassiveMicroserviceModule {
 	async run(): Promise<void> {
 		console.log('Hello from Microde');
 	}
+
+	async stop(): Promise<void> {}
 }
 
 const service = new Microservice();

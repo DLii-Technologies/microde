@@ -8,32 +8,6 @@ struct RecordingModule {
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl MicroserviceModule for RecordingModule {
-    fn initialize(&mut self) -> ModuleFuture {
-        self.record("initialize")
-    }
-
-    fn setup(&mut self) -> ModuleFuture {
-        self.record("setup")
-    }
-
-    fn run(&mut self) -> ModuleFuture {
-        self.record("run")
-    }
-
-    fn teardown(&mut self) -> ModuleFuture {
-        self.record("teardown")
-    }
-
-    fn shutdown(&mut self) -> ModuleFuture {
-        self.record("shutdown")
-    }
-
-    fn cleanup(&mut self) -> ModuleFuture {
-        self.record("cleanup")
-    }
-}
-
 impl RecordingModule {
     fn record(&self, event: &'static str) -> ModuleFuture {
         let events = self.events.clone();
@@ -44,20 +18,64 @@ impl RecordingModule {
     }
 }
 
-impl ActiveMicroserviceModule for RecordingModule {
+struct PassiveRecording(RecordingModule);
+
+impl MicroserviceModule for PassiveRecording {
+    const KIND: ModuleKind = ModuleKind::Passive;
+
+    fn initialize(&mut self) -> ModuleFuture {
+        self.0.record("initialize")
+    }
+    fn setup(&mut self) -> ModuleFuture {
+        self.0.record("setup")
+    }
+    fn run(&mut self) -> ModuleFuture {
+        self.0.record("run")
+    }
     fn stop(&mut self) -> ModuleFuture {
-        self.record("stop")
+        self.0.record("stop")
+    }
+    fn teardown(&mut self) -> ModuleFuture {
+        self.0.record("teardown")
+    }
+    fn shutdown(&mut self) -> ModuleFuture {
+        self.0.record("shutdown")
+    }
+    fn cleanup(&mut self) -> ModuleFuture {
+        self.0.record("cleanup")
     }
 }
 
-#[test]
-fn passive_storage_tracks_stage_and_dispatches_lifecycle() {
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let mut installed = InstalledModule::passive(RecordingModule {
-        events: events.clone(),
-    });
+struct ActiveRecording(RecordingModule);
 
-    assert_eq!(installed.kind(), ModuleKind::Passive);
+impl MicroserviceModule for ActiveRecording {
+    const KIND: ModuleKind = ModuleKind::Active;
+
+    fn initialize(&mut self) -> ModuleFuture {
+        self.0.record("initialize")
+    }
+    fn setup(&mut self) -> ModuleFuture {
+        self.0.record("setup")
+    }
+    fn run(&mut self) -> ModuleFuture {
+        self.0.record("run")
+    }
+    fn stop(&mut self) -> ModuleFuture {
+        self.0.record("stop")
+    }
+    fn teardown(&mut self) -> ModuleFuture {
+        self.0.record("teardown")
+    }
+    fn shutdown(&mut self) -> ModuleFuture {
+        self.0.record("shutdown")
+    }
+    fn cleanup(&mut self) -> ModuleFuture {
+        self.0.record("cleanup")
+    }
+}
+
+fn assert_lifecycle(mut installed: InstalledModule, expected_kind: ModuleKind) {
+    assert_eq!(installed.kind(), expected_kind);
     assert_eq!(installed.stage(), ModuleStage::Installed);
     installed.set_stage(ModuleStage::Executing);
     assert_eq!(installed.stage(), ModuleStage::Executing);
@@ -65,53 +83,39 @@ fn passive_storage_tracks_stage_and_dispatches_lifecycle() {
     block_on(installed.initialize()).unwrap();
     block_on(installed.setup()).unwrap();
     block_on(installed.run()).unwrap();
-    assert!(installed.stop().is_none());
+    block_on(installed.stop()).unwrap();
     block_on(installed.teardown()).unwrap();
     block_on(installed.shutdown()).unwrap();
     block_on(installed.cleanup()).unwrap();
-
-    assert_eq!(
-        *events.lock().unwrap(),
-        vec![
-            "initialize",
-            "setup",
-            "run",
-            "teardown",
-            "shutdown",
-            "cleanup"
-        ]
-    );
 }
 
 #[test]
-fn active_storage_dispatches_stop_and_reports_active_kind() {
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let mut installed = InstalledModule::active(RecordingModule {
-        events: events.clone(),
-    });
-
-    assert_eq!(installed.kind(), ModuleKind::Active);
-    assert_eq!(installed.stage(), ModuleStage::Installed);
-    installed.set_stage(ModuleStage::Executing);
-    assert_eq!(installed.stage(), ModuleStage::Executing);
-    block_on(installed.initialize()).unwrap();
-    block_on(installed.setup()).unwrap();
-    block_on(installed.run()).unwrap();
-    block_on(installed.stop().unwrap()).unwrap();
-    block_on(installed.teardown()).unwrap();
-    block_on(installed.shutdown()).unwrap();
-    block_on(installed.cleanup()).unwrap();
-
-    assert_eq!(
-        *events.lock().unwrap(),
-        vec![
-            "initialize",
-            "setup",
-            "run",
-            "stop",
-            "teardown",
-            "shutdown",
-            "cleanup"
-        ]
+fn installed_modules_capture_the_kind_and_dispatch_the_lifecycle() {
+    let passive_events = Arc::new(Mutex::new(Vec::new()));
+    assert_lifecycle(
+        InstalledModule::new(PassiveRecording(RecordingModule {
+            events: passive_events.clone(),
+        })),
+        ModuleKind::Passive,
     );
+
+    let active_events = Arc::new(Mutex::new(Vec::new()));
+    assert_lifecycle(
+        InstalledModule::new(ActiveRecording(RecordingModule {
+            events: active_events.clone(),
+        })),
+        ModuleKind::Active,
+    );
+
+    let expected = vec![
+        "initialize",
+        "setup",
+        "run",
+        "stop",
+        "teardown",
+        "shutdown",
+        "cleanup",
+    ];
+    assert_eq!(*passive_events.lock().unwrap(), expected);
+    assert_eq!(*active_events.lock().unwrap(), expected);
 }

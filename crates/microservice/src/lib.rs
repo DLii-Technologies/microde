@@ -13,6 +13,6 @@ pub use context::{MicroserviceContext, MicroserviceContextHandle};
 pub use error::MicroserviceError;
 pub use execution_result::MicroserviceExecutionResult;
 pub use microservice::Microservice;
-pub use module::{ActiveMicroserviceModule, MicroserviceModule, ModuleFuture};
+pub use module::{MicroserviceModule, ModuleFuture};
 pub use stop_request::MicroserviceStopRequest;
 pub use types::{MicroserviceState, ModuleKind};

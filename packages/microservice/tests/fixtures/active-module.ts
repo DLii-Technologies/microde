@@ -1,7 +1,9 @@
 import type { MicroserviceContext } from '@microde/microservice';
-import { ActiveMicroserviceModule } from '@microde/microservice';
+import { MicroserviceModule, ModuleKind } from '@microde/microservice';
 
-export class ActiveModule extends ActiveMicroserviceModule {
+export class ActiveModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Active;
+
 	constructor(
 		context: MicroserviceContext,
 		events: string[],

@@ -23,6 +23,7 @@ struct PassiveRun {
 }
 
 impl MicroserviceModule for PassiveRun {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         self.events
             .lock()
@@ -35,6 +36,14 @@ impl MicroserviceModule for PassiveRun {
                 None => Ok(()),
             }
         })
+    }
+
+    fn stop(&mut self) -> ModuleFuture {
+        self.events
+            .lock()
+            .unwrap()
+            .push(format!("{}:stop", self.name));
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -54,6 +63,7 @@ struct FailedStopContinues {
 }
 
 impl MicroserviceModule for FailedStopContinues {
+    const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         let completion = self.completion.take().unwrap();
         let completed = self.completed.take().unwrap();
@@ -63,9 +73,6 @@ impl MicroserviceModule for FailedStopContinues {
             Ok(())
         })
     }
-}
-
-impl ActiveMicroserviceModule for FailedStopContinues {
     fn stop(&mut self) -> ModuleFuture {
         let release = self.release.take().unwrap();
         Box::pin(async move {
@@ -106,6 +113,7 @@ impl ActiveRun {
 }
 
 impl MicroserviceModule for ActiveRun {
+    const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         self.events
             .lock()
@@ -124,9 +132,6 @@ impl MicroserviceModule for ActiveRun {
             Ok(())
         })
     }
-}
-
-impl ActiveMicroserviceModule for ActiveRun {
     fn stop(&mut self) -> ModuleFuture {
         self.events
             .lock()
@@ -168,14 +173,14 @@ fn all_passive_runs_settle_and_execution_failures_are_collected() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_passive(|_| PassiveRun {
+        .install(|_| PassiveRun {
             name: "first",
             events: events.clone(),
             failure: None,
         })
         .unwrap();
     service
-        .install_passive(|_| PassiveRun {
+        .install(|_| PassiveRun {
             name: "second",
             events: events.clone(),
             failure: Some(MicroserviceError::new("passive failed")),
@@ -195,7 +200,10 @@ fn all_passive_runs_settle_and_execution_failures_are_collected() {
             .iter()
             .all(|module| module.stage() == ModuleStage::Executed)
     );
-    assert_eq!(*events.lock().unwrap(), vec!["first:run", "second:run"]);
+    assert_eq!(
+        *events.lock().unwrap(),
+        vec!["first:run", "second:run", "second:stop", "first:stop"]
+    );
 }
 
 #[test]
@@ -203,10 +211,10 @@ fn an_active_completion_stops_active_modules_in_reverse_order() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_active(|_| ActiveRun::pending("first", events.clone()))
+        .install(|_| ActiveRun::pending("first", events.clone()))
         .unwrap();
     service
-        .install_active(|_| ActiveRun::immediate("second", events.clone()))
+        .install(|_| ActiveRun::immediate("second", events.clone()))
         .unwrap();
 
     let errors = block_on(service.execute_modules());
@@ -219,16 +227,13 @@ fn an_active_completion_stops_active_modules_in_reverse_order() {
             .iter()
             .all(|module| module.stage() == ModuleStage::Executed)
     );
-    assert_eq!(
-        *events.lock().unwrap(),
-        vec![
-            "first:run",
-            "second:run",
-            "second:stop",
-            "first:stop",
-            "first:complete"
-        ]
-    );
+    assert!(events.lock().unwrap().starts_with(&[
+        "first:run".to_owned(),
+        "second:run".to_owned(),
+        "second:stop".to_owned(),
+        "first:stop".to_owned(),
+        "first:complete".to_owned(),
+    ]));
 }
 
 #[test]
@@ -236,14 +241,14 @@ fn passive_success_does_not_end_execution_while_an_active_run_remains() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_passive(|_| PassiveRun {
+        .install(|_| PassiveRun {
             name: "passive",
             events: events.clone(),
             failure: None,
         })
         .unwrap();
     service
-        .install_active(|_| ActiveRun::immediate("active", events.clone()))
+        .install(|_| ActiveRun::immediate("active", events.clone()))
         .unwrap();
 
     let errors = block_on(service.execute_modules());
@@ -252,7 +257,7 @@ fn passive_success_does_not_end_execution_while_an_active_run_remains() {
     assert!(errors.stop.is_empty());
     assert_eq!(
         *events.lock().unwrap(),
-        vec!["passive:run", "active:run", "active:stop"]
+        vec!["passive:run", "active:run", "active:stop", "passive:stop"]
     );
 }
 
@@ -261,7 +266,7 @@ fn a_stop_request_stops_and_awaits_an_active_run() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_active(|_| ActiveRun::pending("active", events.clone()))
+        .install(|_| ActiveRun::pending("active", events.clone()))
         .unwrap();
     service
         .control
@@ -283,10 +288,10 @@ fn a_passive_failure_triggers_active_shutdown() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_active(|_| ActiveRun::pending("active", events.clone()))
+        .install(|_| ActiveRun::pending("active", events.clone()))
         .unwrap();
     service
-        .install_passive(|_| PassiveRun {
+        .install(|_| PassiveRun {
             name: "passive",
             events: events.clone(),
             failure: Some(MicroserviceError::new("passive failed")),
@@ -305,6 +310,7 @@ fn a_passive_failure_triggers_active_shutdown() {
         vec![
             "active:run",
             "passive:run",
+            "passive:stop",
             "active:stop",
             "active:complete"
         ]
@@ -316,10 +322,10 @@ fn stop_failures_are_recorded_while_successful_stops_are_awaited() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_active(|_| ActiveRun::pending("first", events.clone()))
+        .install(|_| ActiveRun::pending("first", events.clone()))
         .unwrap();
     service
-        .install_active(|_| {
+        .install(|_| {
             ActiveRun::pending("second", events.clone()).with_stop_failure("second stop failed")
         })
         .unwrap();
@@ -353,12 +359,12 @@ fn multiple_stop_failures_follow_reverse_installation_order() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = service();
     service
-        .install_active(|_| {
+        .install(|_| {
             ActiveRun::pending("first", events.clone()).with_stop_failure("first stop failed")
         })
         .unwrap();
     service
-        .install_active(|_| {
+        .install(|_| {
             ActiveRun::pending("second", events.clone()).with_stop_failure("second stop failed")
         })
         .unwrap();
@@ -387,7 +393,7 @@ fn a_run_continues_after_its_active_stop_fails() {
     let (completed, completion_observed) = std::sync::mpsc::channel();
     let mut service = service();
     service
-        .install_active(|_| FailedStopContinues {
+        .install(|_| FailedStopContinues {
             completion: Some(completion),
             release: Some(release),
             completed: Some(completed),

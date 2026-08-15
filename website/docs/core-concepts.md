@@ -33,11 +33,11 @@ Every module receives a `MicroserviceContext` through its constructor. The base 
 
 ## Passive modules
 
-A `PassiveMicroserviceModule` performs work whose `run()` promise completes on its own. When a service has only passive modules, it begins unwinding after every module settles.
+A module declares `ModuleKind.Passive` when its `run()` promise completes on its own. When a service has only passive modules, it begins stopping modules after every module settles.
 
 ## Active modules
 
-An `ActiveMicroserviceModule` represents a long-running component and adds a `stop()` method. If an active module finishes, a passive module fails, or the service receives a stop request, Microde asks active modules to stop in reverse installation order before unwinding the lifecycle.
+A module declares `ModuleKind.Active` when it represents a long-running component. If an active module finishes, a passive module fails, or the service receives a stop request, Microde asks every module to stop in reverse installation order before unwinding the lifecycle.
 
 The active module's `stop()` implementation should cause its `run()` promise to settle.
 

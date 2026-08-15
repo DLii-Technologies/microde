@@ -5,8 +5,8 @@ use futures::channel::oneshot;
 use futures::executor::block_on;
 use futures::future::{join, poll_fn};
 use microde_microservice::{
-    ActiveMicroserviceModule, Microservice, MicroserviceContextHandle, MicroserviceError,
-    MicroserviceModule, MicroserviceState, MicroserviceStopRequest, ModuleFuture,
+    Microservice, MicroserviceContextHandle, MicroserviceError, MicroserviceModule,
+    MicroserviceState, MicroserviceStopRequest, ModuleFuture, ModuleKind,
 };
 
 struct PassiveFixture {
@@ -53,12 +53,17 @@ impl PassiveFixture {
 }
 
 impl MicroserviceModule for PassiveFixture {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn initialize(&mut self) -> ModuleFuture {
         self.phase("initialize", self.initialize_error)
     }
 
     fn setup(&mut self) -> ModuleFuture {
         self.phase("setup", self.setup_error)
+    }
+
+    fn cleanup(&mut self) -> ModuleFuture {
+        self.phase("cleanup", self.cleanup_error)
     }
 
     fn run(&mut self) -> ModuleFuture {
@@ -81,8 +86,8 @@ impl MicroserviceModule for PassiveFixture {
         })
     }
 
-    fn cleanup(&mut self) -> ModuleFuture {
-        self.phase("cleanup", self.cleanup_error)
+    fn stop(&mut self) -> ModuleFuture {
+        self.phase("stop", false)
     }
 }
 
@@ -124,6 +129,18 @@ impl ActiveFixture {
 }
 
 impl MicroserviceModule for ActiveFixture {
+    const KIND: ModuleKind = ModuleKind::Active;
+    fn cleanup(&mut self) -> ModuleFuture {
+        let fails = self.cleanup_error;
+        Box::pin(async move {
+            if fails {
+                Err(MicroserviceError::new("cleanup failed"))
+            } else {
+                Ok(())
+            }
+        })
+    }
+
     fn run(&mut self) -> ModuleFuture {
         self.events
             .lock()
@@ -139,19 +156,6 @@ impl MicroserviceModule for ActiveFixture {
         })
     }
 
-    fn cleanup(&mut self) -> ModuleFuture {
-        let fails = self.cleanup_error;
-        Box::pin(async move {
-            if fails {
-                Err(MicroserviceError::new("cleanup failed"))
-            } else {
-                Ok(())
-            }
-        })
-    }
-}
-
-impl ActiveMicroserviceModule for ActiveFixture {
     fn stop(&mut self) -> ModuleFuture {
         self.events
             .lock()
@@ -189,7 +193,7 @@ fn parity_01_two_passive_modules_complete_successfully() {
     let mut service = Microservice::new();
     for name in ["first", "second"] {
         service
-            .install_passive(|context| PassiveFixture::new(name, events.clone(), context))
+            .install(|context| PassiveFixture::new(name, events.clone(), context))
             .unwrap();
     }
 
@@ -207,6 +211,8 @@ fn parity_01_two_passive_modules_complete_successfully() {
             "second:setup",
             "first:run",
             "second:run",
+            "second:stop",
+            "first:stop",
             "second:cleanup",
             "first:cleanup"
         ]
@@ -218,7 +224,7 @@ fn parity_02_active_module_receives_stop() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_active(|_| ActiveFixture::immediate("active", events.clone()))
+        .install(|_| ActiveFixture::immediate("active", events.clone()))
         .unwrap();
 
     assert_eq!(block_on(service.run()).unwrap().exit_code, 0);
@@ -233,10 +239,10 @@ fn parity_03_multiple_active_modules_stop_in_reverse_order() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_active(|_| ActiveFixture::pending("first", events.clone()))
+        .install(|_| ActiveFixture::pending("first", events.clone()))
         .unwrap();
     service
-        .install_active(|_| ActiveFixture::immediate("second", events.clone()))
+        .install(|_| ActiveFixture::immediate("second", events.clone()))
         .unwrap();
 
     block_on(service.run()).unwrap();
@@ -252,7 +258,7 @@ fn parity_04_initialization_failure() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PassiveFixture::new("module", events.clone(), context);
             module.initialize_error = true;
             module
@@ -270,7 +276,7 @@ fn parity_05_setup_failure() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PassiveFixture::new("module", events.clone(), context);
             module.setup_error = true;
             module
@@ -288,7 +294,7 @@ fn parity_06_execution_failure() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PassiveFixture::new("module", events.clone(), context);
             module.execution_error = true;
             module
@@ -306,7 +312,7 @@ fn parity_07_stop_failure() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_active(|_| {
+        .install(|_| {
             let mut module = ActiveFixture::immediate("active", events.clone());
             module.stop_error = true;
             module
@@ -324,7 +330,7 @@ fn parity_08_cleanup_failure() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PassiveFixture::new("module", events.clone(), context);
             module.cleanup_error = true;
             module
@@ -342,7 +348,7 @@ fn parity_09_simultaneous_error_categories_follow_priority() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_active(|_| {
+        .install(|_| {
             let mut module = ActiveFixture::pending("active", events.clone());
             module.stop_error = true;
             module.cleanup_error = true;
@@ -350,7 +356,7 @@ fn parity_09_simultaneous_error_categories_follow_priority() {
         })
         .unwrap();
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PassiveFixture::new("passive", events.clone(), context);
             module.execution_error = true;
             module.requested_stop = Some(MicroserviceStopRequest::with_error(
@@ -382,7 +388,7 @@ fn parity_10_explicit_stop_exit_code() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_active(|_| ActiveFixture::pending("active", events))
+        .install(|_| ActiveFixture::pending("active", events))
         .unwrap();
     let mut run = service.run();
     poll_until_pending(&mut run);
@@ -401,7 +407,7 @@ fn parity_11_explicit_stop_error() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_active(|_| ActiveFixture::pending("active", events))
+        .install(|_| ActiveFixture::pending("active", events))
         .unwrap();
     let mut run = service.run();
     poll_until_pending(&mut run);
@@ -421,7 +427,7 @@ fn parity_12_module_initiated_shutdown_request() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut service = Microservice::new();
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PassiveFixture::new("module", events, context);
             module.requested_stop = Some(MicroserviceStopRequest::with_exit_code(23));
             module

@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::executor::block_on;
 use microde_microservice::{
     Microservice, MicroserviceContextHandle, MicroserviceError, MicroserviceExecutionResult,
-    MicroserviceModule, MicroserviceState, MicroserviceStopRequest, ModuleFuture,
+    MicroserviceModule, MicroserviceState, MicroserviceStopRequest, ModuleFuture, ModuleKind,
 };
 
 struct RequestingModule {
@@ -16,10 +16,7 @@ struct RequestingModule {
 struct CleanupNotifier(Option<mpsc::Sender<()>>);
 
 impl MicroserviceModule for CleanupNotifier {
-    fn run(&mut self) -> ModuleFuture {
-        Box::pin(async { Ok(()) })
-    }
-
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn cleanup(&mut self) -> ModuleFuture {
         let sender = self.0.take().unwrap();
         Box::pin(async move {
@@ -27,14 +24,26 @@ impl MicroserviceModule for CleanupNotifier {
             Ok(())
         })
     }
+
+    fn run(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
+    fn stop(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 struct UnexpectedPanic(mpsc::Sender<()>);
 
 impl MicroserviceModule for UnexpectedPanic {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         self.0.send(()).unwrap();
         panic!("unexpected module panic")
+    }
+
+    fn stop(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -45,10 +54,7 @@ struct PanickingModule {
 }
 
 impl MicroserviceModule for PanickingModule {
-    fn run(&mut self) -> ModuleFuture {
-        self.context.panic(self.error.clone());
-    }
-
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn shutdown(&mut self) -> ModuleFuture {
         let marker = self.shutdown_marker.clone();
         Box::pin(async move {
@@ -56,12 +62,24 @@ impl MicroserviceModule for PanickingModule {
             Ok(())
         })
     }
+
+    fn run(&mut self) -> ModuleFuture {
+        self.context.panic(self.error.clone())
+    }
+    fn stop(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 impl MicroserviceModule for RequestingModule {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         self.context
             .request_stop(MicroserviceStopRequest::with_exit_code(6));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn stop(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
     }
 }
@@ -70,7 +88,7 @@ impl MicroserviceModule for RequestingModule {
 fn public_construction_supports_module_requested_shutdown() {
     let mut service = Microservice::default();
     service
-        .install_passive(|context| RequestingModule { context })
+        .install(|context| RequestingModule { context })
         .unwrap();
 
     let result = block_on(service.run()).unwrap();
@@ -90,13 +108,17 @@ fn public_construction_supports_module_requested_shutdown() {
 fn dropping_the_completion_future_does_not_cancel_the_lifecycle() {
     let (sender, receiver) = mpsc::channel();
     let mut service = Microservice::new();
-    service
-        .install_passive(|_| CleanupNotifier(Some(sender)))
-        .unwrap();
+    service.install(|_| CleanupNotifier(Some(sender))).unwrap();
 
     drop(service.run());
 
     receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while service.state() != MicroserviceState::Finished && Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+
     assert_eq!(service.state(), MicroserviceState::Finished);
 }
 
@@ -104,9 +126,7 @@ fn dropping_the_completion_future_does_not_cancel_the_lifecycle() {
 fn an_unexpected_lifecycle_panic_completes_all_waiters_with_an_error() {
     let (sender, receiver) = mpsc::channel();
     let mut service = Microservice::new();
-    service
-        .install_passive(|_| UnexpectedPanic(sender))
-        .unwrap();
+    service.install(|_| UnexpectedPanic(sender)).unwrap();
     let run = service.run();
     receiver.recv_timeout(Duration::from_secs(1)).unwrap();
     let stop = service.stop(MicroserviceStopRequest::success());
@@ -132,7 +152,7 @@ fn production_panic_terminates_the_process() {
         let shutdown_marker = PathBuf::from(std::env::var_os(SHUTDOWN_MARKER).unwrap());
         let mut service = Microservice::new();
         service
-            .install_passive(|context| PanickingModule {
+            .install(|context| PanickingModule {
                 context,
                 error: (mode == "with-error").then(|| MicroserviceError::new("fatal child error")),
                 shutdown_marker,
@@ -166,7 +186,7 @@ fn runtime_context_rejects_stop_requests_before_execution() {
     let mut service = Microservice::new();
     let mut captured_context = None;
     service
-        .install_passive(|context| {
+        .install(|context| {
             captured_context = Some(context.clone());
             RequestingModule { context }
         })

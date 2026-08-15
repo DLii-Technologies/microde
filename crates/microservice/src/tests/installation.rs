@@ -15,7 +15,12 @@ impl MicroserviceContext for TestContext {
 struct Passive;
 
 impl MicroserviceModule for Passive {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn stop(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
     }
 }
@@ -23,12 +28,10 @@ impl MicroserviceModule for Passive {
 struct Active;
 
 impl MicroserviceModule for Active {
+    const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
     }
-}
-
-impl ActiveMicroserviceModule for Active {
     fn stop(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
     }
@@ -70,10 +73,10 @@ fn installs_passive_and_active_modules_in_order_with_the_shared_context() {
     assert!(panic.is_err());
 
     microservice
-        .install_passive(passive_factory(received_contexts.clone()))
+        .install(passive_factory(received_contexts.clone()))
         .unwrap();
     microservice
-        .install_active(active_factory(received_contexts.clone()))
+        .install(active_factory(received_contexts.clone()))
         .unwrap();
 
     assert_eq!(microservice.state(), MicroserviceState::Idle);
@@ -95,9 +98,7 @@ fn installs_passive_and_active_modules_in_order_with_the_shared_context() {
 
     for installed in &mut microservice.modules {
         futures::executor::block_on(installed.run()).unwrap();
-        if let Some(stop) = installed.stop() {
-            futures::executor::block_on(stop).unwrap();
-        }
+        futures::executor::block_on(installed.stop()).unwrap();
     }
 }
 
@@ -109,10 +110,10 @@ fn rejects_installation_after_execution_has_started() {
     let received_contexts = Arc::new(Mutex::new(Vec::new()));
 
     let error = microservice
-        .install_passive(passive_factory(received_contexts.clone()))
+        .install(passive_factory(received_contexts.clone()))
         .unwrap_err();
     let active_error = microservice
-        .install_active(active_factory(received_contexts))
+        .install(active_factory(received_contexts))
         .unwrap_err();
 
     assert_eq!(
@@ -129,7 +130,7 @@ fn restores_idle_state_when_a_factory_panics() {
     let mut microservice = Microservice::with_context(context);
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = microservice.install_passive(panicking_factory());
+        let _ = microservice.install(panicking_factory());
     }));
 
     assert!(panic.is_err());
@@ -137,5 +138,5 @@ fn restores_idle_state_when_a_factory_panics() {
     assert!(microservice.modules.is_empty());
 
     microservice.set_state(MicroserviceState::Running);
-    assert!(microservice.install_passive(panicking_factory()).is_err());
+    assert!(microservice.install(panicking_factory()).is_err());
 }

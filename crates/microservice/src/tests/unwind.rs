@@ -38,10 +38,7 @@ impl UnwindModule {
 }
 
 impl MicroserviceModule for UnwindModule {
-    fn run(&mut self) -> ModuleFuture {
-        Box::pin(async { Ok(()) })
-    }
-
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn teardown(&mut self) -> ModuleFuture {
         self.phase("teardown", self.fail_teardown)
     }
@@ -52,6 +49,14 @@ impl MicroserviceModule for UnwindModule {
 
     fn cleanup(&mut self) -> ModuleFuture {
         self.phase("cleanup", self.fail_cleanup)
+    }
+
+    fn run(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn stop(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -67,7 +72,7 @@ fn install(
     configure: impl FnOnce(&mut UnwindModule),
 ) {
     service
-        .install_passive(|_| {
+        .install(|_| {
             let mut module = UnwindModule {
                 name,
                 events: events.clone(),

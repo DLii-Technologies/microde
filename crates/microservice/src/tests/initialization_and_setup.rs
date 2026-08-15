@@ -30,6 +30,7 @@ struct PhaseModule {
 }
 
 impl MicroserviceModule for PhaseModule {
+    const KIND: ModuleKind = ModuleKind::Passive;
     fn initialize(&mut self) -> ModuleFuture {
         let event = format!("{}:initialize", self.name);
         let events = self.events.clone();
@@ -71,6 +72,10 @@ impl MicroserviceModule for PhaseModule {
     fn run(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
     }
+
+    fn stop(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 fn service() -> (Microservice, Arc<RuntimeControl>) {
@@ -91,7 +96,7 @@ fn install(
     configure: impl FnOnce(&mut PhaseModule),
 ) {
     service
-        .install_passive(|context| {
+        .install(|context| {
             let mut module = PhaseModule {
                 name,
                 events: events.clone(),

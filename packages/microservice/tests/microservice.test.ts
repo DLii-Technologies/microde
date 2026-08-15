@@ -91,7 +91,11 @@ describe('Microservice Execution', () => {
 		const events: string[] = [];
 		const microservice = new Microservice();
 		microservice.install((instance) => {
-			return new PassiveModule(instance, events);
+			return new (class extends PassiveModule {
+				override async stop(): Promise<void> {
+					this.record('stop');
+				}
+			})(instance, events);
 		});
 
 		const firstRun = microservice.run();
@@ -104,6 +108,7 @@ describe('Microservice Execution', () => {
 			'initialize',
 			'setup',
 			'run',
+			'stop',
 			'teardown',
 			'shutdown',
 			'cleanup',
