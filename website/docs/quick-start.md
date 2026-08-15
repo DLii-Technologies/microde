@@ -8,27 +8,25 @@ title: Quick start
 Create a passive module for a finite task, install it, and run the service:
 
 ```ts
-import { Microservice, PassiveMicroserviceModule } from '@microde/microservice';
+import {
+	Microservice,
+	type MicroserviceContext,
+	PassiveMicroserviceModule,
+} from '@microde/microservice';
 
 class GreetingModule extends PassiveMicroserviceModule {
-	async initialize(): Promise<void> {}
-
-	async setup(): Promise<void> {}
+	constructor(context: MicroserviceContext) {
+		super(context);
+	}
 
 	async run(): Promise<void> {
 		console.log('Hello from Microde');
 	}
-
-	async teardown(): Promise<void> {}
-
-	async shutdown(): Promise<void> {}
-
-	async cleanup(): Promise<void> {}
 }
 
 const service = new Microservice();
 
-service.install((microservice) => new GreetingModule(microservice));
+service.install((context) => new GreetingModule(context));
 
 const result = await service.run();
 process.exitCode = result.exitCode;
@@ -47,3 +45,5 @@ process.exitCode = result.exitCode;
 ```
 
 An individual `Microservice` can run only once. Install every module before calling `run()`.
+
+Module constructors should accept `MicroserviceContext`, not the concrete `Microservice` class. The context exposes `stop()` and `panic()` without coupling the module to lifecycle coordination APIs such as `install()` and `run()`.

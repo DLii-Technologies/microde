@@ -9,7 +9,11 @@ title: Examples
 An active module keeps its `run()` promise pending until `stop()` releases it:
 
 ```ts
-import { ActiveMicroserviceModule, Microservice } from '@microde/microservice';
+import {
+	ActiveMicroserviceModule,
+	Microservice,
+	type MicroserviceContext,
+} from '@microde/microservice';
 
 class WorkerModule extends ActiveMicroserviceModule {
 	private finish!: () => void;
@@ -17,8 +21,9 @@ class WorkerModule extends ActiveMicroserviceModule {
 		this.finish = resolve;
 	});
 
-	async initialize(): Promise<void> {}
-	async setup(): Promise<void> {}
+	constructor(context: MicroserviceContext) {
+		super(context);
+	}
 
 	async run(): Promise<void> {
 		return this.completion;
@@ -27,14 +32,10 @@ class WorkerModule extends ActiveMicroserviceModule {
 	async stop(): Promise<void> {
 		this.finish();
 	}
-
-	async teardown(): Promise<void> {}
-	async shutdown(): Promise<void> {}
-	async cleanup(): Promise<void> {}
 }
 
 const service = new Microservice();
-service.install((microservice) => new WorkerModule(microservice));
+service.install((context) => new WorkerModule(context));
 
 process.once('SIGTERM', () => void service.stop());
 
