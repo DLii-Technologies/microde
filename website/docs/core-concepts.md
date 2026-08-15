@@ -24,12 +24,12 @@ Initialization and setup proceed in installation order. Teardown, shutdown, and 
 
 ## Module context
 
-Every module receives a `MicroserviceContext` through its constructor. The base module exposes it as the read-only `context` property. The context deliberately contains only the service operations a module needs:
+Every module receives a `MicroserviceContext` through its constructor. The base module makes it available to subclasses as the protected, read-only `context` property. The context deliberately contains only the service operations a module needs:
 
-- `stop()` requests an orderly stop and supports an optional exit code, error, or both.
+- `requestStop()` requests an orderly stop without waiting for the overall lifecycle result. Its optional request object can contain an exit code, error, or both.
 - `panic()` terminates immediately when normal lifecycle cleanup would be unsafe.
 
-`Microservice` implements this contract, but modules should accept `MicroserviceContext` rather than depend on the concrete lifecycle coordinator. This keeps modules focused and makes them easier to test with a minimal context substitute.
+`Microservice` owns a dedicated object that implements this contract and supplies it to module factories. Modules should accept `MicroserviceContext` rather than depend on the concrete lifecycle coordinator. This keeps modules focused and makes them easier to test with a minimal context substitute.
 
 ## Passive modules
 

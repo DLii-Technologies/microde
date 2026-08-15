@@ -54,7 +54,7 @@ returned in the execution result after cleanup completes.
 
 Use `PassiveMicroserviceModule` for work that finishes on its own. Use
 `ActiveMicroserviceModule` for long-running components that implement `stop()`.
-Modules receive a `MicroserviceContext`, which exposes only the `stop()` and
+Modules receive a `MicroserviceContext`, which exposes only the `requestStop()` and
 `panic()` operations they need from their owning service.
 
 ## Documentation

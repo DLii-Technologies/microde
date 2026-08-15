@@ -1,8 +1,29 @@
 import {
 	ActiveMicroserviceModule,
+	ModuleKind,
 	type MicroserviceModule,
 } from './microservice-module.js';
-import type { MicroserviceContext } from './microservice-context.js';
+import type {
+	MicroserviceContext,
+	MicroserviceStopRequest,
+} from './microservice-context.js';
+
+class DefaultMicroserviceContext implements MicroserviceContext {
+	constructor(
+		private readonly requestStopCallback: (
+			request?: MicroserviceStopRequest,
+		) => void,
+		private readonly panicCallback: (error?: unknown) => never,
+	) {}
+
+	requestStop(request?: MicroserviceStopRequest): void {
+		this.requestStopCallback(request);
+	}
+
+	panic(error?: unknown): never {
+		return this.panicCallback(error);
+	}
+}
 
 enum ModuleStage {
 	Installed,
@@ -96,8 +117,9 @@ export interface MicroserviceExecutionResult {
  * process.exitCode = result.exitCode;
  * ```
  */
-export class Microservice implements MicroserviceContext {
+export class Microservice {
 	private readonly modules: InstalledModule[] = [];
+	private readonly context: MicroserviceContext;
 	private readonly stopRequest: Promise<void>;
 	private resolveStopRequest!: () => void;
 	private currentState = MicroserviceState.Idle;
@@ -110,6 +132,10 @@ export class Microservice implements MicroserviceContext {
 		this.stopRequest = new Promise<void>((resolve) => {
 			this.resolveStopRequest = resolve;
 		});
+		this.context = new DefaultMicroserviceContext(
+			(request) => this.requestStop(request),
+			(error) => this.panic(error),
+		);
 	}
 
 	/** The service's current lifecycle state. */
@@ -120,12 +146,12 @@ export class Microservice implements MicroserviceContext {
 	/**
 	 * Creates and installs a module.
 	 *
-	 * @param factory A synchronous factory that receives this microservice as context.
+	 * @param factory A synchronous factory that receives the module-facing context.
 	 * @returns The installed module.
 	 * @throws If called after execution has started, or if another installation is in progress.
 	 */
 	install<Module extends MicroserviceModule>(
-		factory: (context: Microservice) => Module,
+		factory: (context: MicroserviceContext) => Module,
 	): Module {
 		if (this.state !== MicroserviceState.Idle) {
 			throw new Error(
@@ -135,7 +161,7 @@ export class Microservice implements MicroserviceContext {
 
 		this.currentState = MicroserviceState.Installing;
 		try {
-			const module = factory(this);
+			const module = factory(this.context);
 			this.modules.push({
 				module,
 				stage: ModuleStage.Installed,
@@ -189,14 +215,29 @@ export class Microservice implements MicroserviceContext {
 	}
 
 	/** Requests an orderly stop. */
-	stop(): void;
+	stop(): Promise<MicroserviceExecutionResult>;
 	/** Requests an orderly stop with a specific exit code. */
-	stop(exitCode: number): void;
+	stop(exitCode: number): Promise<MicroserviceExecutionResult>;
 	/** Requests an orderly stop caused by an error. */
-	stop(error: unknown): void;
+	stop(error: unknown): Promise<MicroserviceExecutionResult>;
 	/** Requests an orderly stop with both an exit code and error. */
-	stop(exitCode: number, error: unknown): void;
-	stop(exitCodeOrError?: number | unknown, error?: unknown): void {
+	stop(
+		exitCode: number,
+		error: unknown,
+	): Promise<MicroserviceExecutionResult>;
+	stop(
+		exitCodeOrError?: number | unknown,
+		error?: unknown,
+	): Promise<MicroserviceExecutionResult> {
+		const request =
+			typeof exitCodeOrError === 'number'
+				? { exitCode: exitCodeOrError, error }
+				: { error: exitCodeOrError };
+		this.requestStop(request);
+		return this.execution!;
+	}
+
+	private requestStop(request: MicroserviceStopRequest = {}): void {
 		if (
 			this.currentState === MicroserviceState.Idle ||
 			this.currentState === MicroserviceState.Installing
@@ -208,12 +249,8 @@ export class Microservice implements MicroserviceContext {
 
 		if (!this.stopRequested) {
 			this.stopRequested = true;
-			if (typeof exitCodeOrError === 'number') {
-				this.stopExitCode = exitCodeOrError;
-				this.stopError = error;
-			} else {
-				this.stopError = exitCodeOrError;
-			}
+			this.stopExitCode = request.exitCode;
+			this.stopError = request.error;
 			this.resolveStopRequest();
 		}
 	}
@@ -305,9 +342,9 @@ export class Microservice implements MicroserviceContext {
 				(error) => recordError(error, ErrorPriority.Execution),
 			);
 
-			if (installedModule.module instanceof ActiveMicroserviceModule) {
+			if (installedModule.module.kind === ModuleKind.Active) {
 				activeRuns.push({
-					module: installedModule.module,
+					module: installedModule.module as ActiveMicroserviceModule,
 					completion,
 				});
 			} else {

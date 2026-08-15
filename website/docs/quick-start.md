@@ -46,4 +46,4 @@ process.exitCode = result.exitCode;
 
 An individual `Microservice` can run only once. Install every module before calling `run()`.
 
-Module constructors should accept `MicroserviceContext`, not the concrete `Microservice` class. The context exposes `stop()` and `panic()` without coupling the module to lifecycle coordination APIs such as `install()` and `run()`.
+Module constructors should accept `MicroserviceContext`, not the concrete `Microservice` class. The context exposes non-blocking `requestStop()` and `panic()` operations without coupling the module to lifecycle coordination APIs such as `install()`, `run()`, public `stop()`, or `state`.

@@ -29,7 +29,7 @@ const result = await service.run();
 process.exitCode = result.exitCode;
 ```
 
-Modules depend on `MicroserviceContext`, the narrow `stop()` and `panic()`
-contract implemented by `Microservice`.
+Modules depend on `MicroserviceContext`, the narrow `requestStop()` and `panic()`
+contract supplied by the `Microservice` through a dedicated context object.
 
 See the documentation in the repository for lifecycle guides and the complete API reference.
