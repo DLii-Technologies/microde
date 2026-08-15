@@ -1,7 +1,9 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::{MicroserviceError, ModuleKind};
+use crate::{
+    MicroserviceError, ModuleKind, Provider, RelationshipDescriptor, RunContext, SetupContext,
+};
 
 /// The object-safe future returned by module lifecycle operations.
 pub type ModuleFuture =
@@ -12,6 +14,14 @@ pub trait MicroserviceModule: Send {
     /// Declares how the runtime interprets completion of [`Self::run`].
     const KIND: ModuleKind;
 
+    fn relationships(&self) -> Vec<RelationshipDescriptor> {
+        Vec::new()
+    }
+
+    fn providers(&self) -> Vec<Provider> {
+        Vec::new()
+    }
+
     fn initialize(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
     }
@@ -20,8 +30,16 @@ pub trait MicroserviceModule: Send {
         Box::pin(async { Ok(()) })
     }
 
+    fn setup_with_context(&mut self, _context: SetupContext) -> ModuleFuture {
+        self.setup()
+    }
+
     fn run(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
+    }
+
+    fn run_with_context(&mut self, _context: RunContext) -> ModuleFuture {
+        self.run()
     }
 
     fn stop(&mut self) -> ModuleFuture {
@@ -43,8 +61,8 @@ pub trait MicroserviceModule: Send {
 
 pub(crate) trait RuntimeModule: Send {
     fn initialize(&mut self) -> ModuleFuture;
-    fn setup(&mut self) -> ModuleFuture;
-    fn run(&mut self) -> ModuleFuture;
+    fn setup_with_context(&mut self, context: SetupContext) -> ModuleFuture;
+    fn run_with_context(&mut self, context: RunContext) -> ModuleFuture;
     fn stop(&mut self) -> ModuleFuture;
     fn teardown(&mut self) -> ModuleFuture;
     fn shutdown(&mut self) -> ModuleFuture;
@@ -55,11 +73,11 @@ impl<Module: MicroserviceModule> RuntimeModule for Module {
     fn initialize(&mut self) -> ModuleFuture {
         MicroserviceModule::initialize(self)
     }
-    fn setup(&mut self) -> ModuleFuture {
-        MicroserviceModule::setup(self)
+    fn setup_with_context(&mut self, context: SetupContext) -> ModuleFuture {
+        MicroserviceModule::setup_with_context(self, context)
     }
-    fn run(&mut self) -> ModuleFuture {
-        MicroserviceModule::run(self)
+    fn run_with_context(&mut self, context: RunContext) -> ModuleFuture {
+        MicroserviceModule::run_with_context(self, context)
     }
     fn stop(&mut self) -> ModuleFuture {
         MicroserviceModule::stop(self)

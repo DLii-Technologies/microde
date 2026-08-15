@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use futures::executor::block_on;
 
 use super::*;
+use crate::{RunContext, SetupContext};
 
 struct RecordingModule {
     events: Arc<Mutex<Vec<&'static str>>>,
@@ -81,8 +83,11 @@ fn assert_lifecycle(mut installed: InstalledModule, expected_kind: ModuleKind) {
     assert_eq!(installed.stage(), ModuleStage::Executing);
 
     block_on(installed.initialize()).unwrap();
-    block_on(installed.setup()).unwrap();
-    block_on(installed.run()).unwrap();
+    let resolutions = Arc::new(HashMap::new());
+    let id = installed.id().clone();
+    block_on(installed.setup_with_context(SetupContext::new(id.clone(), resolutions.clone())))
+        .unwrap();
+    block_on(installed.run_with_context(RunContext::new(id, resolutions))).unwrap();
     block_on(installed.stop()).unwrap();
     block_on(installed.teardown()).unwrap();
     block_on(installed.shutdown()).unwrap();
@@ -93,17 +98,23 @@ fn assert_lifecycle(mut installed: InstalledModule, expected_kind: ModuleKind) {
 fn installed_modules_capture_the_kind_and_dispatch_the_lifecycle() {
     let passive_events = Arc::new(Mutex::new(Vec::new()));
     assert_lifecycle(
-        InstalledModule::new(PassiveRecording(RecordingModule {
-            events: passive_events.clone(),
-        })),
+        InstalledModule::new(
+            ModuleInstanceId::new("passive"),
+            PassiveRecording(RecordingModule {
+                events: passive_events.clone(),
+            }),
+        ),
         ModuleKind::Passive,
     );
 
     let active_events = Arc::new(Mutex::new(Vec::new()));
     assert_lifecycle(
-        InstalledModule::new(ActiveRecording(RecordingModule {
-            events: active_events.clone(),
-        })),
+        InstalledModule::new(
+            ModuleInstanceId::new("active"),
+            ActiveRecording(RecordingModule {
+                events: active_events.clone(),
+            }),
+        ),
         ModuleKind::Active,
     );
 

@@ -1,11 +1,21 @@
-import {
-	ModuleKind,
-	type MicroserviceModule,
-} from './microservice-module.js';
+import { ModuleKind, type MicroserviceModule } from './microservice-module.js';
 import type {
 	MicroserviceContext,
 	MicroserviceStopRequest,
 } from './microservice-context.js';
+import {
+	createModuleHandle,
+	isModuleHandleOwnedBy,
+	type ModuleHandle,
+	type ModuleInstanceId,
+} from './composition.js';
+import { DependencyGraph } from './dependency-graph.js';
+import type { RelationshipHandle } from './relationship.js';
+import {
+	createRunContext,
+	createSetupContext,
+	type ResolvedRelationship,
+} from './lifecycle-context.js';
 
 class DefaultMicroserviceContext implements MicroserviceContext {
 	constructor(
@@ -41,6 +51,7 @@ enum ModuleStage {
 }
 
 interface InstalledModule {
+	readonly id: ModuleInstanceId;
 	readonly module: MicroserviceModule;
 	stage: ModuleStage;
 }
@@ -118,6 +129,14 @@ export interface MicroserviceExecutionResult {
  */
 export class Microservice {
 	private readonly modules: InstalledModule[] = [];
+	private readonly moduleIds = new Set<ModuleInstanceId>();
+	private readonly compositionOwner = {};
+	private readonly bindings = new Map<
+		RelationshipHandle,
+		{ readonly owner: ModuleInstanceId; readonly target: ModuleInstanceId }
+	>();
+	private resolutions: ReadonlyMap<RelationshipHandle, ResolvedRelationship> =
+		new Map();
 	private readonly context: MicroserviceContext;
 	private readonly stopRequest: Promise<void>;
 	private resolveStopRequest!: () => void;
@@ -126,6 +145,7 @@ export class Microservice {
 	private stopRequested = false;
 	private stopExitCode?: number;
 	private stopError?: unknown;
+	private compositionSealed = false;
 
 	constructor() {
 		this.stopRequest = new Promise<void>((resolve) => {
@@ -150,25 +170,150 @@ export class Microservice {
 	 * @throws If called after execution has started, or if another installation is in progress.
 	 */
 	install<Module extends MicroserviceModule>(
+		id: ModuleInstanceId,
 		factory: (context: MicroserviceContext) => Module,
-	): Module {
+	): ModuleHandle<Module>;
+	install<Module extends MicroserviceModule>(
+		factory: (context: MicroserviceContext) => Module,
+	): Module;
+	install<Module extends MicroserviceModule>(
+		idOrFactory:
+			ModuleInstanceId | ((context: MicroserviceContext) => Module),
+		maybeFactory?: (context: MicroserviceContext) => Module,
+	): Module | ModuleHandle<Module> {
 		if (this.state !== MicroserviceState.Idle) {
 			throw new Error(
 				`Cannot install module after microservice has started. Current state: ${MicroserviceState[this.state]}`,
 			);
 		}
+		if (this.compositionSealed) {
+			throw new Error(
+				'Cannot install module after composition is sealed.',
+			);
+		}
+		const named = typeof idOrFactory === 'string';
+		const id = named ? idOrFactory : `@installation/${this.modules.length}`;
+		if (this.moduleIds.has(id)) {
+			throw new Error(`Module instance ID "${id}" is already installed.`);
+		}
+		const factory = named ? maybeFactory! : idOrFactory;
 
 		this.currentState = MicroserviceState.Installing;
 		try {
 			const module = factory(this.context);
 			this.modules.push({
+				id,
 				module,
 				stage: ModuleStage.Installed,
 			});
-			return module;
+			this.moduleIds.add(id);
+			return named
+				? createModuleHandle<Module>(id, this.compositionOwner)
+				: module;
 		} finally {
 			this.currentState = MicroserviceState.Idle;
 		}
+	}
+
+	/** Binds one declared relationship slot to an exact installed module. */
+	bind<
+		Consumer extends MicroserviceModule,
+		Provider extends MicroserviceModule,
+	>(
+		consumer: ModuleHandle<Consumer>,
+		slotName: string,
+		target: ModuleHandle<Provider>,
+	): void {
+		if (this.compositionSealed || this.state !== MicroserviceState.Idle) {
+			throw new Error(
+				'Cannot bind relationships after composition is sealed.',
+			);
+		}
+		this.ensureOwnedHandle(consumer);
+		this.ensureOwnedHandle(target);
+		const installed = this.modules.find(({ id }) => id === consumer.id)!;
+		const slot = installed.module.relationships.find(
+			(relationship) => relationship.name === slotName,
+		);
+		if (!slot) {
+			throw new Error(
+				`Unknown relationship "${consumer.id}.${slotName}".`,
+			);
+		}
+		if (this.bindings.has(slot)) {
+			throw new Error(
+				`Relationship "${consumer.id}.${slotName}" is already bound.`,
+			);
+		}
+		const provider = this.modules.find(({ id }) => id === target.id)!;
+		if (
+			slot.port.moduleType &&
+			!(provider.module instanceof slot.port.moduleType)
+		) {
+			throw new Error(
+				`Module "${target.id}" does not satisfy concrete module requirement "${slot.port.moduleType.name}".`,
+			);
+		}
+		if (
+			!provider.module.providers.some(
+				({ port }) => port.key === slot.port.key,
+			)
+		) {
+			throw new Error(
+				`Module "${target.id}" does not provide port "${slot.port.description}".`,
+			);
+		}
+		this.bindings.set(slot, { owner: consumer.id, target: target.id });
+	}
+
+	private ensureOwnedHandle(handle: ModuleHandle<MicroserviceModule>): void {
+		if (!isModuleHandleOwnedBy(handle, this.compositionOwner)) {
+			throw new Error(
+				`Module handle "${handle.id}" belongs to another microservice.`,
+			);
+		}
+	}
+
+	private wireComposition(): void {
+		const graph = new DependencyGraph(this.modules.map(({ id }) => id));
+		for (const installed of this.modules) {
+			for (const slot of installed.module.relationships) {
+				const binding = this.bindings.get(slot);
+				if (!binding) {
+					throw new Error(
+						`Missing binding for relationship "${installed.id}.${slot.name}".`,
+					);
+				}
+				if (slot.kind === 'dependency') {
+					graph.addDependency(binding.owner, binding.target);
+				}
+			}
+		}
+		const order = graph.order();
+		const staged = new Map<RelationshipHandle, ResolvedRelationship>();
+		const providerValues = new Map<object, unknown>();
+		for (const installed of this.modules) {
+			for (const slot of installed.module.relationships) {
+				const binding = this.bindings.get(slot)!;
+				const provider = this.modules.find(
+					({ id }) => id === binding.target,
+				)!;
+				const exported = provider.module.providers.find(
+					({ port }) => port.key === slot.port.key,
+				)!;
+				if (!providerValues.has(exported)) {
+					providerValues.set(exported, exported.resolve());
+				}
+				staged.set(slot, {
+					owner: installed.id,
+					value: providerValues.get(exported),
+				});
+			}
+		}
+		const byId = new Map(this.modules.map((module) => [module.id, module]));
+		const ordered = order.map((id) => byId.get(id)!);
+		this.modules.splice(0, this.modules.length, ...ordered);
+		this.resolutions = staged;
 	}
 
 	/**
@@ -185,6 +330,19 @@ export class Microservice {
 					`Cannot run microservice more than once. Current state: ${MicroserviceState[this.currentState]}`,
 				),
 			);
+		}
+		if (this.compositionSealed) {
+			return Promise.reject(
+				new Error(
+					'Cannot run microservice more than once. Composition is sealed.',
+				),
+			);
+		}
+		this.compositionSealed = true;
+		try {
+			this.wireComposition();
+		} catch (error) {
+			return Promise.reject(error);
 		}
 
 		this.currentState = MicroserviceState.Initialization;
@@ -324,7 +482,9 @@ export class Microservice {
 		for (const installedModule of this.modules) {
 			if (this.stopRequested) break;
 			installedModule.stage = ModuleStage.SettingUp;
-			await installedModule.module.setup();
+			await installedModule.module.setup(
+				createSetupContext(installedModule.id, this.resolutions),
+			);
 			installedModule.stage = ModuleStage.SetUp;
 		}
 	}
@@ -381,10 +541,7 @@ export class Microservice {
 			}
 		});
 
-		const stoppedRuns = await this.stopModules(
-			moduleRuns,
-			recordError,
-		);
+		const stoppedRuns = await this.stopModules(moduleRuns, recordError);
 
 		await Promise.all(
 			stoppedRuns
@@ -449,7 +606,11 @@ export class Microservice {
 		installedModule.stage = ModuleStage.Executing;
 
 		return Promise.resolve()
-			.then(() => installedModule.module.run())
+			.then(() =>
+				installedModule.module.run(
+					createRunContext(installedModule.id, this.resolutions),
+				),
+			)
 			.then<ModuleExecutionOutcome, ModuleExecutionOutcome>(
 				() => ({ status: 'fulfilled' }),
 				(error) => {

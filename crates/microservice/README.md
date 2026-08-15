@@ -49,3 +49,26 @@ normally; an active module's overridden `run` future should return only after
 the module stops. A service's owned `run` future can be polled
 while another task calls `Microservice::stop`; the first stop request wins and
 all callers receive the same completed result.
+
+## Explicit dependencies and references
+
+`install_named` returns an opaque, identity-bearing `ModuleHandle`. Modules expose
+owned values through typed `Port` and `Provider` declarations and return their
+relationship descriptors from `relationships()`. Composition binds exact instances:
+
+```rust,ignore
+let database = service.install_named("database", |_| DatabaseModule::new())?;
+let orders = service.install_named("orders", |_| OrdersModule::new(database_port.clone()))?;
+service.bind(&orders, &orders_database, &database)?;
+```
+
+Override `setup_with_context` to use dependencies. Override `run_with_context` to
+use dependencies or references. Provider values are owned and cloned, preserving
+`Send + 'static` lifecycle futures. Dependency cycles fail before initialization;
+reference cycles are allowed and do not affect lifecycle order.
+
+Calling `run` seals the composition. All bindings and provider factories are
+validated and staged before initialization, so a wiring or provider error starts
+no lifecycle callback. Named instances are ordered by the dependency graph with
+stable IDs as the tie-breaker; teardown, shutdown, and cleanup use the exact
+reverse order.

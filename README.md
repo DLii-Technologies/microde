@@ -4,8 +4,7 @@
 
 [![Codecov](https://codecov.io/gh/DLii-Technologies/microde/branch/master/graph/badge.svg)](https://codecov.io/gh/DLii-Technologies/microde/branch/master)
 
-Microde is a framework for building software as a collection of composable, independently defined modules rather than committing early to a fixed service topology. Modules are connected through a common composition and communication model, with support for multiple communication patterns and runtimes hidden behind consistent abstractions. This lets the same application architecture run as a single executable, a small set of services, or a fully distributed microservice system—allowing deployment boundaries to evolve without forcing the software itself to be redesigned.
-
+Microde is a framework for building software as a collection of composable, independently defined modules rather than committing early to a fixed service topology. It provides the same explicit composition and lifecycle model in TypeScript and Rust, with runtime-specific APIs and consistent dependency, reference, and failure semantics.
 
 ## Installation
 
@@ -14,6 +13,13 @@ npm install @microde/microservice
 ```
 
 Microde is published as an ECMAScript module and includes TypeScript declarations.
+
+For Rust applications, add the `microde-microservice` crate from this workspace:
+
+```toml
+[dependencies]
+microde-microservice = "0.2"
+```
 
 ## Quick start
 
@@ -53,14 +59,45 @@ if (result.error !== undefined) {
 process.exitCode = result.exitCode;
 ```
 
-A service initializes and sets up modules in installation order, then tears them
-down, shuts them down, and cleans them up in reverse order. Lifecycle failures are
-returned in the execution result after cleanup completes.
+A service initializes and sets up modules in dependency-first order, then tears
+them down, shuts them down, and cleans them up in reverse order. Lifecycle
+failures are returned in the execution result after cleanup completes.
 
 Declare `ModuleKind.Passive` for work whose `run()` finishes on its own and
 `ModuleKind.Active` for work whose `run()` finishes only after `stop()`.
 Modules receive a `MicroserviceContext`, which exposes only the `requestStop()` and
 `panic()` operations they need from their owning service.
+
+Named installations return opaque handles that bind relationship slots to exact
+module instances. Providers expose typed values through runtime ports;
+dependencies determine lifecycle order, while references are available only
+during `run` and do not participate in the dependency graph. Rust exposes the
+equivalent model through `ModuleHandle`, `Port`, `Provider`, `Dependency`, and
+`Reference`.
+
+The Rust runtime can be used like this:
+
+```rust
+use microde_microservice::{Microservice, MicroserviceError, MicroserviceModule, ModuleFuture, ModuleKind};
+
+struct Greeting;
+
+impl MicroserviceModule for Greeting {
+    const KIND: ModuleKind = ModuleKind::Passive;
+
+    fn run(&mut self) -> ModuleFuture {
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), MicroserviceError> {
+    let mut service = Microservice::new();
+    service.install(|_| Greeting)?;
+    service.run().await?;
+    Ok(())
+}
+```
 
 ## Documentation
 

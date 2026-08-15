@@ -1,12 +1,15 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use futures::future::{BoxFuture, FutureExt, join_all, ready};
 use futures::stream::{FuturesUnordered, StreamExt};
 
+use crate::dependency_graph::DependencyGraph;
+use crate::lifecycle_context::ResolvedRelationship;
 use crate::runtime::{
     ErrorPriority, ErrorRecorder, InstalledModule, ModuleStage, RuntimeContext, RuntimeControl,
     spawn, terminate_process,
@@ -15,8 +18,19 @@ use crate::runtime::{
 use crate::{MicroserviceContext, ModuleFuture};
 use crate::{
     MicroserviceContextHandle, MicroserviceError, MicroserviceExecutionResult, MicroserviceModule,
-    MicroserviceState, MicroserviceStopRequest, ModuleKind,
+    MicroserviceState, MicroserviceStopRequest, ModuleHandle, ModuleHandleIdentity,
+    ModuleInstanceId, ModuleKind, RelationshipKind, RelationshipSlot, RunContext, SetupContext,
 };
+
+static NEXT_SERVICE_ID: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone)]
+struct Binding {
+    owner: ModuleInstanceId,
+    target: ModuleInstanceId,
+    port_id: u64,
+    provider: crate::Provider,
+}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ModuleExecutionErrors {
@@ -34,6 +48,10 @@ pub struct Microservice {
     pub(crate) context: MicroserviceContextHandle,
     pub(crate) control: Arc<RuntimeControl>,
     pub(crate) current_state: Arc<Mutex<MicroserviceState>>,
+    composition_id: u64,
+    bindings: HashMap<u64, Binding>,
+    resolutions: HashMap<u64, ResolvedRelationship>,
+    composition_sealed: bool,
 }
 
 struct InstallationStateReset(Arc<Mutex<MicroserviceState>>);
@@ -62,6 +80,10 @@ impl Microservice {
             context,
             control,
             current_state,
+            composition_id: NEXT_SERVICE_ID.fetch_add(1, Ordering::Relaxed),
+            bindings: HashMap::new(),
+            resolutions: HashMap::new(),
+            composition_sealed: false,
         }
     }
 
@@ -80,6 +102,10 @@ impl Microservice {
             context,
             control,
             current_state: Arc::new(Mutex::new(MicroserviceState::Idle)),
+            composition_id: NEXT_SERVICE_ID.fetch_add(1, Ordering::Relaxed),
+            bindings: HashMap::new(),
+            resolutions: HashMap::new(),
+            composition_sealed: false,
         }
     }
 
@@ -106,19 +132,193 @@ impl Microservice {
             drop(reset);
             module
         };
-        self.modules.push(InstalledModule::new(module));
+        let id = ModuleInstanceId::new(format!("@installation/{}", self.modules.len()));
+        self.modules.push(InstalledModule::new(id, module));
+        Ok(())
+    }
+
+    pub fn install_named<Module, Factory>(
+        &mut self,
+        id: impl Into<String>,
+        factory: Factory,
+    ) -> Result<ModuleHandle<Module>, MicroserviceError>
+    where
+        Module: MicroserviceModule + 'static,
+        Factory: FnOnce(MicroserviceContextHandle) -> Module,
+    {
+        let id = self.reserve_named_id(id.into())?;
+        self.set_state(MicroserviceState::Installing);
+        let module = {
+            let reset = InstallationStateReset(self.current_state.clone());
+            let module = factory(self.context.clone());
+            drop(reset);
+            module
+        };
+        let handle = ModuleHandle::new(id.clone(), self.composition_id);
+        self.modules.push(InstalledModule::new(id, module));
+        Ok(handle)
+    }
+
+    fn reserve_named_id(&self, value: String) -> Result<ModuleInstanceId, MicroserviceError> {
+        self.ensure_installable()?;
+        let id = ModuleInstanceId::new(value);
+        if self.modules.iter().any(|module| module.id() == &id) {
+            return Err(MicroserviceError::new(format!(
+                "module instance ID '{}' is already installed",
+                id.as_str()
+            )));
+        }
+        Ok(id)
+    }
+
+    pub fn bind(
+        &mut self,
+        consumer: &dyn ModuleHandleIdentity,
+        slot: &dyn RelationshipSlot,
+        target: &dyn ModuleHandleIdentity,
+    ) -> Result<(), MicroserviceError> {
+        self.ensure_installable()?;
+        for handle in [
+            (consumer.module_instance_id(), consumer.composition_owner()),
+            (target.module_instance_id(), target.composition_owner()),
+        ] {
+            if handle.1 != self.composition_id {
+                return Err(MicroserviceError::new(format!(
+                    "module handle '{}' belongs to another microservice",
+                    handle.0.as_str()
+                )));
+            }
+        }
+        let descriptor = slot.descriptor();
+        let installed = self
+            .modules
+            .iter()
+            .find(|module| module.id() == consumer.module_instance_id())
+            .unwrap();
+        if !installed
+            .relationships()
+            .iter()
+            .any(|known| known.slot_id == descriptor.slot_id)
+        {
+            return Err(MicroserviceError::new(format!(
+                "unknown relationship '{}.{}'",
+                consumer.module_instance_id().as_str(),
+                descriptor.name
+            )));
+        }
+        if self.bindings.contains_key(&descriptor.slot_id) {
+            return Err(MicroserviceError::new(format!(
+                "relationship '{}.{}' is already bound",
+                consumer.module_instance_id().as_str(),
+                descriptor.name
+            )));
+        }
+        let provider = self
+            .modules
+            .iter()
+            .find(|module| module.id() == target.module_instance_id())
+            .unwrap();
+        if let Some((required, name)) = descriptor.module_type
+            && provider.module_type() != required
+        {
+            return Err(MicroserviceError::new(format!(
+                "module '{}' does not satisfy concrete module requirement '{}'",
+                target.module_instance_id().as_str(),
+                name.rsplit("::").next().unwrap_or(name)
+            )));
+        }
+        let Some(exported) = provider
+            .providers()
+            .iter()
+            .find(|known| known.port_id == descriptor.port_id)
+        else {
+            return Err(MicroserviceError::new(format!(
+                "module '{}' does not provide port '{}'",
+                target.module_instance_id().as_str(),
+                descriptor.port_description
+            )));
+        };
+        self.bindings.insert(
+            descriptor.slot_id,
+            Binding {
+                owner: consumer.module_instance_id().clone(),
+                target: target.module_instance_id().clone(),
+                port_id: descriptor.port_id,
+                provider: exported.clone(),
+            },
+        );
+        Ok(())
+    }
+
+    fn wire_composition(&mut self) -> Result<(), MicroserviceError> {
+        let mut graph = DependencyGraph::new(
+            self.modules
+                .iter()
+                .map(|module| module.id().clone())
+                .collect(),
+        );
+        for module in &self.modules {
+            for relationship in module.relationships() {
+                let binding = self.bindings.get(&relationship.slot_id).ok_or_else(|| {
+                    MicroserviceError::new(format!(
+                        "missing binding for relationship '{}.{}'",
+                        module.id().as_str(),
+                        relationship.name
+                    ))
+                })?;
+                if relationship.kind == RelationshipKind::Dependency {
+                    graph.add_validated_dependency(&binding.owner, &binding.target);
+                }
+            }
+        }
+        let order = graph.order()?;
+        let mut staged = HashMap::new();
+        let mut provider_values: HashMap<
+            (ModuleInstanceId, u64),
+            Arc<dyn std::any::Any + Send + Sync>,
+        > = HashMap::new();
+        for module in &self.modules {
+            for relationship in module.relationships() {
+                let binding = &self.bindings[&relationship.slot_id];
+                let provider_key = (binding.target.clone(), binding.port_id);
+                let value = match provider_values.get(&provider_key) {
+                    Some(value) => value.clone(),
+                    None => {
+                        let value = binding.provider.resolve()?;
+                        provider_values.insert(provider_key, value.clone());
+                        value
+                    }
+                };
+                staged.insert(
+                    relationship.slot_id,
+                    ResolvedRelationship {
+                        owner: module.id().clone(),
+                        name: relationship.name.clone(),
+                        kind: relationship.kind,
+                        value,
+                    },
+                );
+            }
+        }
+        self.modules
+            .sort_by_key(|module| order.iter().position(|id| id == module.id()));
+        self.resolutions = staged;
         Ok(())
     }
 
     fn ensure_installable(&self) -> Result<(), MicroserviceError> {
-        if self.state() == MicroserviceState::Idle {
-            return Ok(());
+        if self.state() != MicroserviceState::Idle {
+            return Err(MicroserviceError::new(format!(
+                "cannot install module after microservice has started; current state: {:?}",
+                self.state()
+            )));
         }
-
-        Err(MicroserviceError::new(format!(
-            "cannot install module after microservice has started; current state: {:?}",
-            self.state()
-        )))
+        if self.composition_sealed {
+            return Err(MicroserviceError::new(
+                "cannot modify composition after it is sealed",
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn set_state(&self, state: MicroserviceState) {
@@ -143,12 +343,28 @@ impl Microservice {
             .boxed();
         }
 
+        if self.composition_sealed {
+            return ready(Err(MicroserviceError::new(
+                "cannot run microservice more than once; composition is sealed",
+            )))
+            .boxed();
+        }
+        self.composition_sealed = true;
+
+        if let Err(error) = self.wire_composition() {
+            return ready(Err(error)).boxed();
+        }
+
         self.set_state(MicroserviceState::Initialization);
         let mut runner = Self {
             modules: std::mem::take(&mut self.modules),
             context: self.context.clone(),
             control: self.control.clone(),
             current_state: self.current_state.clone(),
+            composition_id: self.composition_id,
+            bindings: std::mem::take(&mut self.bindings),
+            resolutions: std::mem::take(&mut self.resolutions),
+            composition_sealed: true,
         };
 
         let control = runner.control.clone();
@@ -262,13 +478,15 @@ impl Microservice {
     }
 
     pub(crate) async fn setup_modules(&mut self) -> Result<(), MicroserviceError> {
+        let resolutions = Arc::new(self.resolutions.clone());
         for installed in &mut self.modules {
             if self.control.stop_requested() {
                 break;
             }
 
             installed.set_stage(ModuleStage::SettingUp);
-            match installed.setup().await {
+            let context = SetupContext::new(installed.id().clone(), resolutions.clone());
+            match installed.setup_with_context(context).await {
                 Ok(()) => installed.set_stage(ModuleStage::SetUp),
                 Err(error) => return Err(error),
             }
@@ -279,11 +497,13 @@ impl Microservice {
     pub(crate) async fn execute_modules(&mut self) -> ModuleExecutionErrors {
         let mut errors = ModuleExecutionErrors::default();
         let mut runs: FuturesUnordered<ModuleRunFuture> = FuturesUnordered::new();
+        let resolutions = Arc::new(self.resolutions.clone());
 
         for (index, installed) in self.modules.iter_mut().enumerate() {
             installed.set_stage(ModuleStage::Executing);
             let kind = installed.kind();
-            let run = installed.run();
+            let context = RunContext::new(installed.id().clone(), resolutions.clone());
+            let run = installed.run_with_context(context);
             runs.push(Box::pin(async move { (index, kind, run.await) }));
         }
 
@@ -435,6 +655,12 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
     "microservice lifecycle panicked".to_owned()
 }
 
+#[cfg(test)]
+#[path = "tests/composition_wiring.rs"]
+mod composition_wiring_tests;
+#[cfg(test)]
+#[path = "tests/dependency_lifecycle.rs"]
+mod dependency_lifecycle_tests;
 #[cfg(test)]
 #[path = "tests/execution.rs"]
 mod execution_tests;

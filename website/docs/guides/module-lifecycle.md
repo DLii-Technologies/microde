@@ -6,14 +6,21 @@ title: Module lifecycle
 
 Use each lifecycle phase for a distinct level of resource ownership.
 
-| Phase        | Purpose                                        | Order                         |
-| ------------ | ---------------------------------------------- | ----------------------------- |
-| `initialize` | Acquire resources and prepare local state      | Installation order            |
-| `setup`      | Connect the module to other service components | Installation order            |
-| `run`        | Perform finite or long-running work            | Started in installation order |
-| `teardown`   | Undo setup                                     | Reverse installation order    |
-| `shutdown`   | Release initialized resources                  | Reverse installation order    |
-| `cleanup`    | Perform unconditional final cleanup            | Reverse installation order    |
+| Phase        | Purpose                                        | Order                                                          |
+| ------------ | ---------------------------------------------- | -------------------------------------------------------------- |
+| `initialize` | Acquire resources and prepare local state      | Dependency-first order                                         |
+| `setup`      | Connect the module to other service components | Dependency-first order                                         |
+| `run`        | Perform finite or long-running work            | Invoked in dependency-first order; runs may overlap            |
+| `stop`       | Ask running work to finish                     | Dispatched in reverse order; waits retain existing concurrency |
+| `teardown`   | Undo setup                                     | Sequential reverse order                                       |
+| `shutdown`   | Release initialized resources                  | Sequential reverse order                                       |
+| `cleanup`    | Perform unconditional final cleanup            | Sequential reverse order                                       |
+
+For modules without dependency edges, stable instance IDs provide the
+tie-breaker, so installation order does not change the lifecycle trace. Calling
+`run()` seals the composition before any lifecycle callback starts. Dependencies
+are available in `setup` and `run`; references are available only in `run` and
+do not affect ordering.
 
 ## Partial startup
 

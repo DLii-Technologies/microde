@@ -13,6 +13,7 @@ import {
 	type MicroserviceContext,
 	MicroserviceModule,
 	ModuleKind,
+	port,
 } from '@microde/microservice';
 
 class GreetingModule extends MicroserviceModule {
@@ -52,3 +53,25 @@ process.exitCode = result.exitCode;
 An individual `Microservice` can run only once. Install every module before calling `run()`.
 
 Module constructors should accept `MicroserviceContext`, not the concrete `Microservice` class. The context exposes non-blocking `requestStop()` and `panic()` operations without coupling the module to lifecycle coordination APIs such as `install()`, `run()`, public `stop()`, or `state`.
+
+## Named dependencies
+
+Install named instances and bind relationship slots explicitly before calling
+`run()`:
+
+```ts
+const databasePort = port<Database>('database');
+const database = service.install(
+	'database',
+	(context) => new DatabaseModule(context),
+);
+const orders = service.install(
+	'orders',
+	(context) => new OrdersModule(context, databasePort),
+);
+service.bind(orders, 'database', database);
+```
+
+Microde validates all bindings, rejects dependency cycles, and publishes
+provider resolutions atomically when `run()` begins. References may be cyclic,
+but they are not part of lifecycle ordering and cannot be read during `setup`.
