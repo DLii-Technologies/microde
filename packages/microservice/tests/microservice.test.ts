@@ -789,7 +789,7 @@ describe('Microservice Stopping', () => {
 		);
 	});
 
-	it('returns the execution promise and handles repeated stop requests once', async () => {
+	it('returns no value and handles repeated stop requests once', async () => {
 		const events: string[] = [];
 		let releaseRun!: () => void;
 		const runCompletion = new Promise<void>((resolve) => {
@@ -814,12 +814,25 @@ describe('Microservice Stopping', () => {
 		const firstStop = microservice.stop();
 		const secondStop = microservice.stop();
 
-		expect(firstStop).toBe(execution);
-		expect(secondStop).toBe(execution);
+		expect(firstStop).toBeUndefined();
+		expect(secondStop).toBeUndefined();
 		await expect(execution).resolves.toEqual({ exitCode: 0 });
 		expect(events.filter((event) => event === 'active:stop')).toHaveLength(
 			1,
 		);
+	});
+
+	it('does not deadlock when a module awaits its stop request', async () => {
+		const microservice = new Microservice();
+		microservice.install((instance) => {
+			return new (class extends PassiveModule {
+				override async run(): Promise<void> {
+					await this.context.stop();
+				}
+			})(instance, [], 'passive');
+		});
+
+		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
 	});
 
 	it('stops with an explicit exit code', async () => {
@@ -827,7 +840,7 @@ describe('Microservice Stopping', () => {
 		microservice.install((instance) => new ActiveModule(instance, []));
 
 		const execution = microservice.run();
-		await expect(microservice.stop(42)).resolves.toEqual({ exitCode: 42 });
+		expect(microservice.stop(42)).toBeUndefined();
 		await expect(execution).resolves.toEqual({ exitCode: 42 });
 		expect(microservice.state).toBe(MicroserviceState.Failed);
 	});
@@ -837,8 +850,9 @@ describe('Microservice Stopping', () => {
 		const microservice = new Microservice();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		void microservice.run();
-		await expect(microservice.stop(failure)).resolves.toEqual({
+		const execution = microservice.run();
+		expect(microservice.stop(failure)).toBeUndefined();
+		await expect(execution).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -849,8 +863,9 @@ describe('Microservice Stopping', () => {
 		const microservice = new Microservice();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		void microservice.run();
-		await expect(microservice.stop(75, failure)).resolves.toEqual({
+		const execution = microservice.run();
+		expect(microservice.stop(75, failure)).toBeUndefined();
+		await expect(execution).resolves.toEqual({
 			exitCode: 75,
 			error: failure,
 		});
@@ -861,12 +876,13 @@ describe('Microservice Stopping', () => {
 		const microservice = new Microservice();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		void microservice.run();
+		const execution = microservice.run();
 		const firstStop = microservice.stop(2, firstFailure);
 		const secondStop = microservice.stop(3, new Error('second request'));
 
-		expect(secondStop).toBe(firstStop);
-		await expect(firstStop).resolves.toEqual({
+		expect(firstStop).toBeUndefined();
+		expect(secondStop).toBeUndefined();
+		await expect(execution).resolves.toEqual({
 			exitCode: 2,
 			error: firstFailure,
 		});
@@ -894,11 +910,10 @@ describe('Microservice Stopping', () => {
 
 		const execution = microservice.run();
 		await vi.waitFor(() => expect(events).toContain('first:initialize'));
-		const stopping = microservice.stop();
+		microservice.stop();
 		releaseInitialization();
 
-		await expect(stopping).resolves.toEqual({ exitCode: 0 });
-		expect(stopping).toBe(execution);
+		await expect(execution).resolves.toEqual({ exitCode: 0 });
 		expect(events).toEqual([
 			'first:initialize',
 			'first:shutdown',
@@ -929,11 +944,10 @@ describe('Microservice Stopping', () => {
 
 		const execution = microservice.run();
 		await vi.waitFor(() => expect(events).toContain('first:setup'));
-		const stopping = microservice.stop();
+		microservice.stop();
 		releaseSetup();
 
-		await expect(stopping).resolves.toEqual({ exitCode: 0 });
-		expect(stopping).toBe(execution);
+		await expect(execution).resolves.toEqual({ exitCode: 0 });
 		expect(events).toEqual([
 			'first:initialize',
 			'second:initialize',
@@ -1132,11 +1146,10 @@ describe('Microservice Stopping', () => {
 		await vi.waitFor(() =>
 			expect(microservice.state).toBe(MicroserviceState.Shutdown),
 		);
-		const stopping = microservice.stop();
+		expect(microservice.stop()).toBeUndefined();
 
-		expect(stopping).toBe(execution);
 		releaseShutdown();
-		await expect(stopping).resolves.toEqual({ exitCode: 0 });
+		await expect(execution).resolves.toEqual({ exitCode: 0 });
 	});
 });
 

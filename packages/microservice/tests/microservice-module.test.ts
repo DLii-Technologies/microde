@@ -10,7 +10,7 @@ import {
 describe('Microservice Modules', () => {
 	it('depends only on the microservice context contract', () => {
 		const context: MicroserviceContext = {
-			stop: vi.fn(() => Promise.resolve({ exitCode: 0 })),
+			stop: vi.fn(),
 			panic: vi.fn(() => {
 				throw new Error('panic');
 			}),
