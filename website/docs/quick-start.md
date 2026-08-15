@@ -7,6 +7,12 @@ title: Quick start
 
 Create a passive module for a finite task, install it, and run the service:
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs groupId="language">
+<TabItem value="typescript" label="TypeScript">
+
 ```ts
 import {
 	Microservice,
@@ -37,6 +43,37 @@ service.install((context) => new GreetingModule(context));
 const result = await service.run();
 process.exitCode = result.exitCode;
 ```
+
+</TabItem>
+<TabItem value="rust" label="Rust">
+
+```rust
+use microde_microservice::{Microservice, MicroserviceError, MicroserviceModule, ModuleFuture, ModuleKind};
+
+struct Greeting;
+
+impl MicroserviceModule for Greeting {
+    const KIND: ModuleKind = ModuleKind::Passive;
+
+    fn run(&mut self) -> ModuleFuture {
+        Box::pin(async {
+            println!("Hello from Microde");
+            Ok(())
+        })
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), MicroserviceError> {
+    let mut service = Microservice::new();
+    service.install(|_| Greeting)?;
+    service.run().await?;
+    Ok(())
+}
+```
+
+</TabItem>
+</Tabs>
 
 `run()` resolves only after the lifecycle has finished, including teardown, shutdown, and cleanup. Lifecycle failures are returned in the result rather than thrown from the returned promise:
 

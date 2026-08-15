@@ -64,7 +64,7 @@ const config: Config = {
 					label: 'API',
 				},
 				{
-					href: '/rustdoc/',
+					href: '/rustdoc/index.html',
 					position: 'left',
 					label: 'Rust API',
 				},
