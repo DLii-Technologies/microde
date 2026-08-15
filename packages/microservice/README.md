@@ -38,3 +38,36 @@ Modules depend on `MicroserviceContext`, the narrow `requestStop()` and `panic()
 contract supplied by the `Microservice` through a dedicated context object.
 
 See the documentation in the repository for lifecycle guides and the complete API reference.
+
+## Explicit dependencies and references
+
+Named installation returns an opaque module handle. Modules declare runtime port
+tokens, provider exports, and relationship slots; the service binds each slot to
+one exact handle before `run()` atomically validates and wires the composition.
+
+```ts
+const databasePort = port<Database>('database');
+
+class OrdersModule extends MicroserviceModule {
+	readonly kind = ModuleKind.Passive;
+	readonly database = dependency('database', databasePort);
+	readonly relationships = [this.database];
+
+	async setup(context: SetupContext) {
+		context.use(this.database);
+	}
+}
+
+const database = service.install(
+	'database',
+	(context) => new DatabaseModule(context),
+);
+const orders = service.install(
+	'orders',
+	(context) => new OrdersModule(context),
+);
+service.bind(orders, 'database', database);
+```
+
+Dependencies form an acyclic lifecycle graph. References may form cycles, do not
+affect ordering, and are accessible only from `RunContext`.

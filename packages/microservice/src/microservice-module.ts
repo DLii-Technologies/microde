@@ -1,4 +1,7 @@
 import type { MicroserviceContext } from './microservice-context.js';
+import type { Provider } from './provider.js';
+import type { RelationshipHandle } from './relationship.js';
+import type { RunContext, SetupContext } from './lifecycle-context.js';
 
 /** Describes whether a module completes independently or requires a stop. */
 export enum ModuleKind {
@@ -15,6 +18,10 @@ export enum ModuleKind {
  */
 export abstract class MicroserviceModule {
 	abstract readonly kind: ModuleKind;
+	/** Relationship slots declared by this module instance. */
+	readonly relationships: readonly RelationshipHandle[] = [];
+	/** Owned contract values exported by this module instance. */
+	readonly providers: readonly Provider<unknown>[] = [];
 
 	/** Creates a module operating within the supplied microservice context. */
 	constructor(protected readonly context: MicroserviceContext) {}
@@ -23,10 +30,10 @@ export abstract class MicroserviceModule {
 	async initialize(): Promise<void> {}
 
 	/** Connects the initialized module to the rest of the service. */
-	async setup(): Promise<void> {}
+	async setup(_context: SetupContext): Promise<void> {}
 
 	/** Performs the module's work. Does nothing by default. */
-	async run(): Promise<void> {}
+	async run(_context: RunContext): Promise<void> {}
 
 	/** Requests that the module finish or release its running work. Does nothing by default. */
 	async stop(): Promise<void> {}

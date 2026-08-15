@@ -1,5 +1,9 @@
 # @microde/microservice
 
+## Unreleased
+
+- Add stable named handles, explicit provider-backed relationships, atomic graph wiring, and lifecycle access contexts.
+
 ## 0.4.0 — 2026-08-15
 
 ### Minor changes

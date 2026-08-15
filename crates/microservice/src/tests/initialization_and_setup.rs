@@ -140,7 +140,12 @@ fn initializes_and_sets_up_in_installation_order_with_stage_tracking() {
             .all(|module| module.stage() == ModuleStage::SetUp)
     );
     for module in &mut service.modules {
-        block_on(module.run()).unwrap();
+        let id = module.id().clone();
+        block_on(module.run_with_context(RunContext::new(
+            id,
+            Arc::new(std::collections::HashMap::new()),
+        )))
+        .unwrap();
     }
 
     assert_eq!(
