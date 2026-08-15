@@ -6,13 +6,13 @@ export type FailingLifecycleStage = 'teardown' | 'shutdown' | 'cleanup';
 
 export class FailingLifecycleModule extends PassiveModule {
 	constructor(
-		microservice: MicroserviceContext,
+		context: MicroserviceContext,
 		events: string[],
 		name: string,
 		private readonly failureStage: FailingLifecycleStage,
 		private readonly failure: Error,
 	) {
-		super(microservice, events, name);
+		super(context, events, name);
 	}
 
 	override async teardown(): Promise<void> {

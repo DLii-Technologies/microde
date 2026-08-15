@@ -5,11 +5,11 @@ import {
 
 export class PassiveModule extends PassiveMicroserviceModule {
 	constructor(
-		microservice: MicroserviceContext,
+		context: MicroserviceContext,
 		protected readonly events: string[],
 		protected readonly name?: string,
 	) {
-		super(microservice);
+		super(context);
 	}
 
 	protected record(event: string): void {

@@ -9,7 +9,7 @@ import type { MicroserviceContext } from './microservice-context.js';
  * instead of extending this class directly.
  */
 export abstract class MicroserviceModule {
-	/** Creates a module owned by the supplied microservice. */
+	/** Creates a module with access to the supplied microservice context. */
 	constructor(public readonly context: MicroserviceContext) {}
 
 	/** Acquires resources needed to configure the module. */

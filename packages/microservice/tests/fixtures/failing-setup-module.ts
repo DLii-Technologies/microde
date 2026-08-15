@@ -4,12 +4,12 @@ import { PassiveModule } from './passive-module.js';
 
 export class FailingSetupModule extends PassiveModule {
 	constructor(
-		microservice: MicroserviceContext,
+		context: MicroserviceContext,
 		events: string[],
 		name: string,
 		private readonly failure: Error,
 	) {
-		super(microservice, events, name);
+		super(context, events, name);
 	}
 
 	override async setup(): Promise<void> {

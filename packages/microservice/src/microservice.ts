@@ -90,7 +90,7 @@ export interface MicroserviceExecutionResult {
  * @example
  * ```ts
  * const service = new Microservice();
- * service.install((microservice) => new DatabaseModule(microservice));
+ * service.install((context) => new DatabaseModule(context));
  *
  * const result = await service.run();
  * process.exitCode = result.exitCode;
@@ -120,12 +120,12 @@ export class Microservice implements MicroserviceContext {
 	/**
 	 * Creates and installs a module.
 	 *
-	 * @param factory A synchronous factory that receives this microservice.
+	 * @param factory A synchronous factory that receives this microservice as context.
 	 * @returns The installed module.
 	 * @throws If called after execution has started, or if another installation is in progress.
 	 */
 	install<Module extends MicroserviceModule>(
-		factory: (microservice: Microservice) => Module,
+		factory: (context: Microservice) => Module,
 	): Module {
 		if (this.state !== MicroserviceState.Idle) {
 			throw new Error(
