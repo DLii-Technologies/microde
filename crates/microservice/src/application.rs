@@ -565,9 +565,8 @@ impl MicrodeApplication {
                     break;
                 },
                 outcome = runs.next().fuse() => {
-                    let Some((index, kind, result)) = outcome else {
-                        break;
-                    };
+                    let (index, kind, result) = outcome
+                        .expect("non-empty module runs have a next completion");
                     let should_stop = kind == ModuleKind::Active || result.is_err();
                     self.record_run_completion((index, kind, result), &mut errors);
                     if should_stop {

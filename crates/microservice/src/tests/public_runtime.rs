@@ -149,6 +149,50 @@ fn application_main_failure_is_an_execution_error() {
 }
 
 #[test]
+fn application_main_succeeds_without_modules() {
+    let mut application = service();
+
+    let result = block_on(application.run(|_| async { Ok(()) })).unwrap();
+
+    assert_eq!(result.exit_code, 0);
+    assert_eq!(result.error, None);
+    assert_eq!(application.state(), MicrodeApplicationState::Finished);
+}
+
+#[test]
+fn stop_interrupts_a_pending_main_without_modules() {
+    let mut application = service();
+    let (started, main_started) = oneshot::channel();
+    let execution = application.run(|_| async move {
+        let _ = started.send(());
+        std::future::pending::<Result<(), MicrodeError>>().await
+    });
+    block_on(main_started).unwrap();
+
+    let result = block_on(application.stop(MicrodeStopRequest::success())).unwrap();
+
+    assert_eq!(block_on(execution).unwrap(), result);
+    assert_eq!(application.state(), MicrodeApplicationState::Finished);
+}
+
+#[test]
+fn application_main_failure_stops_running_modules() {
+    let mut application = service();
+    application.install(|_| StoppableActive::new()).unwrap();
+
+    let result =
+        block_on(application.run(|_| async { Err(MicrodeError::new("main failed with modules")) }))
+            .unwrap();
+
+    assert_eq!(result.exit_code, 1);
+    assert_eq!(
+        result.error,
+        Some(MicrodeError::new("main failed with modules"))
+    );
+    assert_eq!(application.state(), MicrodeApplicationState::Failed);
+}
+
+#[test]
 fn panic_messages_cover_string_and_unknown_payloads() {
     assert_eq!(
         super::panic_message(Box::new("borrowed panic")),
