@@ -10,8 +10,8 @@ const config: Config = {
 		v4: true,
 	},
 
-	url: 'https://dlii-technologies.github.io',
-	baseUrl: '/microde/',
+	url: 'https://microde.dlii.tech',
+	baseUrl: '/',
 	organizationName: 'DLii-Technologies',
 	projectName: 'microde',
 	trailingSlash: false,
