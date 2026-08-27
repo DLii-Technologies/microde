@@ -2,7 +2,7 @@
 name = "microde-microservice"
 version = "0.3.0"
 edition = "2024"
-description = "Composition and lifecycle runtime for Microde microservices."
+description = "Composition and lifecycle runtime for modular Microde applications."
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/DLii-Technologies/microde"

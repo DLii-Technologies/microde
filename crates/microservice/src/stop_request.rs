@@ -1,13 +1,13 @@
-use crate::MicroserviceError;
+use crate::MicrodeError;
 
 /// A non-blocking request for orderly lifecycle termination.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct MicroserviceStopRequest {
+pub struct MicrodeStopRequest {
     pub exit_code: Option<i32>,
-    pub error: Option<MicroserviceError>,
+    pub error: Option<MicrodeError>,
 }
 
-impl MicroserviceStopRequest {
+impl MicrodeStopRequest {
     pub const fn success() -> Self {
         Self {
             exit_code: None,
@@ -22,14 +22,14 @@ impl MicroserviceStopRequest {
         }
     }
 
-    pub fn with_error(error: MicroserviceError) -> Self {
+    pub fn with_error(error: MicrodeError) -> Self {
         Self {
             exit_code: None,
             error: Some(error),
         }
     }
 
-    pub fn with_exit_code_and_error(exit_code: i32, error: MicroserviceError) -> Self {
+    pub fn with_exit_code_and_error(exit_code: i32, error: MicrodeError) -> Self {
         Self {
             exit_code: Some(exit_code),
             error: Some(error),
@@ -43,29 +43,26 @@ mod tests {
 
     #[test]
     fn constructors_capture_each_supported_shape() {
-        let error = MicroserviceError::new("stop failed");
+        let error = MicrodeError::new("stop failed");
 
+        assert_eq!(MicrodeStopRequest::success(), MicrodeStopRequest::default());
         assert_eq!(
-            MicroserviceStopRequest::success(),
-            MicroserviceStopRequest::default()
-        );
-        assert_eq!(
-            MicroserviceStopRequest::with_exit_code(42),
-            MicroserviceStopRequest {
+            MicrodeStopRequest::with_exit_code(42),
+            MicrodeStopRequest {
                 exit_code: Some(42),
                 error: None,
             }
         );
         assert_eq!(
-            MicroserviceStopRequest::with_error(error.clone()),
-            MicroserviceStopRequest {
+            MicrodeStopRequest::with_error(error.clone()),
+            MicrodeStopRequest {
                 exit_code: None,
                 error: Some(error.clone()),
             }
         );
         assert_eq!(
-            MicroserviceStopRequest::with_exit_code_and_error(7, error.clone()),
-            MicroserviceStopRequest {
+            MicrodeStopRequest::with_exit_code_and_error(7, error.clone()),
+            MicrodeStopRequest {
                 exit_code: Some(7),
                 error: Some(error),
             }

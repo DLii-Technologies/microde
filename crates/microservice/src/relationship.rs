@@ -28,7 +28,7 @@ impl<T: ?Sized> Port<T> {
         &self.description
     }
 
-    pub fn for_module<Module: crate::MicroserviceModule + 'static>(
+    pub fn for_module<Module: crate::MicrodeModule + 'static>(
         description: impl Into<String>,
     ) -> Self {
         Self {
@@ -141,9 +141,7 @@ relationship_handle!(Reference, RelationshipKind::Reference);
 pub struct Provider {
     pub(crate) port_id: u64,
     resolver: Arc<
-        dyn Fn() -> Result<Arc<dyn std::any::Any + Send + Sync>, crate::MicroserviceError>
-            + Send
-            + Sync,
+        dyn Fn() -> Result<Arc<dyn std::any::Any + Send + Sync>, crate::MicrodeError> + Send + Sync,
     >,
 }
 
@@ -159,7 +157,7 @@ impl Provider {
     pub fn try_new<T, Factory>(port: Port<T>, factory: Factory) -> Self
     where
         T: Send + Sync + 'static,
-        Factory: Fn() -> Result<T, crate::MicroserviceError> + Send + Sync + 'static,
+        Factory: Fn() -> Result<T, crate::MicrodeError> + Send + Sync + 'static,
     {
         Self {
             port_id: port.id,
@@ -171,7 +169,7 @@ impl Provider {
 
     pub(crate) fn resolve(
         &self,
-    ) -> Result<Arc<dyn std::any::Any + Send + Sync>, crate::MicroserviceError> {
+    ) -> Result<Arc<dyn std::any::Any + Send + Sync>, crate::MicrodeError> {
         (self.resolver)()
     }
 }

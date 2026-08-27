@@ -3,11 +3,11 @@ use std::fmt::{self, Display, Formatter};
 
 /// An owned error that can cross the runtime's concurrency boundaries.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MicroserviceError {
+pub struct MicrodeError {
     message: String,
 }
 
-impl MicroserviceError {
+impl MicrodeError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -15,10 +15,10 @@ impl MicroserviceError {
     }
 }
 
-impl Display for MicroserviceError {
+impl Display for MicrodeError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.message)
     }
 }
 
-impl Error for MicroserviceError {}
+impl Error for MicrodeError {}

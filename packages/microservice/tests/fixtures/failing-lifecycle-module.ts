@@ -1,4 +1,4 @@
-import type { MicroserviceContext } from '@microde/microservice';
+import type { MicrodeContext } from '@microde/microservice';
 
 import { PassiveModule } from './passive-module.js';
 
@@ -6,7 +6,7 @@ export type FailingLifecycleStage = 'teardown' | 'shutdown' | 'cleanup';
 
 export class FailingLifecycleModule extends PassiveModule {
 	constructor(
-		context: MicroserviceContext,
+		context: MicrodeContext,
 		events: string[],
 		name: string,
 		private readonly failureStage: FailingLifecycleStage,

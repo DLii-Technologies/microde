@@ -1,4 +1,4 @@
-# Microde microservice runtime
+# Microde application runtime
 
 [![code coverage](https://codecov.io/gh/DLii-Technologies/microde/graph/badge.svg?component=rust-microservice)](https://codecov.io/gh/DLii-Technologies/microde)
 
@@ -13,12 +13,12 @@ an await point.
 
 ```rust
 use microde_microservice::{
-    Microservice, MicroserviceError, MicroserviceModule, ModuleFuture, ModuleKind,
+    MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind,
 };
 
 struct Worker;
 
-impl MicroserviceModule for Worker {
+impl MicrodeModule for Worker {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn run(&mut self) -> ModuleFuture {
@@ -31,11 +31,11 @@ impl MicroserviceModule for Worker {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), MicroserviceError> {
-    let mut service = Microservice::new();
+async fn main() -> Result<(), MicrodeError> {
+    let mut service = MicrodeApplication::new();
     service.install(|_| Worker)?;
 
-    let result = service.run().await?;
+    let result = service.serve().await?;
     assert_eq!(result.exit_code, 0);
     assert!(result.error.is_none());
 
@@ -43,11 +43,21 @@ async fn main() -> Result<(), MicroserviceError> {
 }
 ```
 
-Every module declares `MicroserviceModule::KIND`. The default `run` and `stop`
+Use `run` for a finite application task. Microde starts the modules first and
+begins orderly shutdown when the task returns:
+
+```rust,ignore
+let result = service.run(|context| async move {
+    import_records().await?;
+    Ok(())
+}).await?;
+```
+
+Every module declares `MicrodeModule::KIND`. The default `run` and `stop`
 operations are no-ops. A passive module's `run` future is expected to complete
 normally; an active module's overridden `run` future should return only after
-the module stops. A service's owned `run` future can be polled
-while another task calls `Microservice::stop`; the first stop request wins and
+the module stops. An application's owned `serve` or `run` future can be polled
+while another task calls `MicrodeApplication::stop`; the first stop request wins and
 all callers receive the same completed result.
 
 ## Explicit dependencies and references
@@ -67,7 +77,7 @@ use dependencies or references. Provider values are owned and cloned, preserving
 `Send + 'static` lifecycle futures. Dependency cycles fail before initialization;
 reference cycles are allowed and do not affect lifecycle order.
 
-Calling `run` seals the composition. All bindings and provider factories are
+Calling `serve` or `run` seals the composition. All bindings and provider factories are
 validated and staged before initialization, so a wiring or provider error starts
 no lifecycle callback. Named instances are ordered by the dependency graph with
 stable IDs as the tie-breaker; teardown, shutdown, and cleanup use the exact

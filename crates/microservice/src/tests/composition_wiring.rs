@@ -14,7 +14,7 @@ struct ProviderModule {
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl MicroserviceModule for ProviderModule {
+impl MicrodeModule for ProviderModule {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn providers(&self) -> Vec<Provider> {
@@ -32,7 +32,7 @@ struct ConsumerModule {
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl MicroserviceModule for ConsumerModule {
+impl MicrodeModule for ConsumerModule {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn relationships(&self) -> Vec<RelationshipDescriptor> {
@@ -50,7 +50,7 @@ fn binds_exact_providers_and_applies_dependency_first_order() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let port = Port::new("database");
     let dependency = Dependency::new("database", port.clone());
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let consumer = service
         .install_named("consumer", |_| ConsumerModule {
             database: dependency.clone(),
@@ -66,7 +66,7 @@ fn binds_exact_providers_and_applies_dependency_first_order() {
         .unwrap();
 
     service.bind(&consumer, &dependency, &provider).unwrap();
-    let result = futures::executor::block_on(service.run()).unwrap();
+    let result = futures::executor::block_on(service.serve()).unwrap();
     assert_eq!(result.exit_code, 0);
     assert_eq!(*events.lock().unwrap(), vec!["provider", "consumer"]);
 }
@@ -75,7 +75,7 @@ fn binds_exact_providers_and_applies_dependency_first_order() {
 fn rejects_duplicate_missing_incompatible_and_foreign_bindings() {
     let port = Port::new("database");
     let dependency = Dependency::new("database", port.clone());
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let consumer = service
         .install_named("consumer", |_| ConsumerModule {
             database: dependency.clone(),
@@ -123,7 +123,7 @@ fn rejects_duplicate_missing_incompatible_and_foreign_bindings() {
         "module 'provider' does not provide port 'other'"
     );
 
-    let mut foreign_service = Microservice::new();
+    let mut foreign_service = MicrodeApplication::new();
     let foreign = foreign_service
         .install_named("foreign", |_| ProviderModule {
             port,
@@ -136,7 +136,7 @@ fn rejects_duplicate_missing_incompatible_and_foreign_bindings() {
             .bind(&consumer, &dependency, &foreign)
             .unwrap_err()
             .to_string(),
-        "module handle 'foreign' belongs to another microservice"
+        "module handle 'foreign' belongs to another application"
     );
 }
 
@@ -145,7 +145,7 @@ fn missing_binding_rejects_run_before_lifecycle_execution() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let port = Port::new("database");
     let dependency = Dependency::new("database", port);
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     service
         .install_named("consumer", |_| ConsumerModule {
             database: dependency,
@@ -154,7 +154,7 @@ fn missing_binding_rejects_run_before_lifecycle_execution() {
         .unwrap();
 
     assert_eq!(
-        futures::executor::block_on(service.run())
+        futures::executor::block_on(service.serve())
             .unwrap_err()
             .to_string(),
         "missing binding for relationship 'consumer.database'"
@@ -168,7 +168,7 @@ struct AccessModule {
     values: Arc<Mutex<Vec<String>>>,
 }
 
-impl MicroserviceModule for AccessModule {
+impl MicrodeModule for AccessModule {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn relationships(&self) -> Vec<RelationshipDescriptor> {
@@ -200,7 +200,7 @@ fn exposes_dependencies_in_setup_and_both_relationship_kinds_in_run() {
     let port = Port::new("database-access");
     let database = Dependency::new("database", port.clone());
     let peer = Reference::new("peer", port.clone());
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let consumer = service
         .install_named("consumer", |_| AccessModule {
             database: database.clone(),
@@ -218,7 +218,7 @@ fn exposes_dependencies_in_setup_and_both_relationship_kinds_in_run() {
     service.bind(&consumer, &database, &provider).unwrap();
     service.bind(&consumer, &peer, &provider).unwrap();
 
-    futures::executor::block_on(service.run()).unwrap();
+    futures::executor::block_on(service.serve()).unwrap();
     assert_eq!(
         *values.lock().unwrap(),
         vec!["setup:primary", "run:primary", "reference:primary"]
@@ -230,7 +230,7 @@ struct GraphNode {
     provider: Provider,
 }
 
-impl MicroserviceModule for GraphNode {
+impl MicrodeModule for GraphNode {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn relationships(&self) -> Vec<RelationshipDescriptor> {
         vec![self.relationship.clone()]
@@ -245,7 +245,7 @@ fn rejects_dependency_cycles_but_allows_reference_cycles() {
     let port = Port::<String>::new("cycle");
     let a_dependency = Dependency::new("peer", port.clone());
     let b_dependency = Dependency::new("peer", port.clone());
-    let mut cyclic = Microservice::new();
+    let mut cyclic = MicrodeApplication::new();
     let a = cyclic
         .install_named("a", |_| GraphNode {
             relationship: a_dependency.descriptor(),
@@ -261,7 +261,7 @@ fn rejects_dependency_cycles_but_allows_reference_cycles() {
     cyclic.bind(&a, &a_dependency, &b).unwrap();
     cyclic.bind(&b, &b_dependency, &a).unwrap();
     assert_eq!(
-        futures::executor::block_on(cyclic.run())
+        futures::executor::block_on(cyclic.serve())
             .unwrap_err()
             .to_string(),
         "dependency cycle detected: a -> b -> a"
@@ -269,7 +269,7 @@ fn rejects_dependency_cycles_but_allows_reference_cycles() {
 
     let a_reference = Reference::new("peer", port.clone());
     let b_reference = Reference::new("peer", port.clone());
-    let mut referenced = Microservice::new();
+    let mut referenced = MicrodeApplication::new();
     let a = referenced
         .install_named("a", |_| GraphNode {
             relationship: a_reference.descriptor(),
@@ -285,7 +285,7 @@ fn rejects_dependency_cycles_but_allows_reference_cycles() {
     referenced.bind(&a, &a_reference, &b).unwrap();
     referenced.bind(&b, &b_reference, &a).unwrap();
     assert_eq!(
-        futures::executor::block_on(referenced.run())
+        futures::executor::block_on(referenced.serve())
             .unwrap()
             .exit_code,
         0
@@ -296,7 +296,7 @@ fn rejects_dependency_cycles_but_allows_reference_cycles() {
 fn rejects_binding_after_lifecycle_execution_and_foreign_consumers() {
     let port = Port::<String>::new("binding-state");
     let dependency = Dependency::new("peer", port.clone());
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let provider = service
         .install_named("provider", |_| ProviderModule {
             port: Port::new("unused"),
@@ -304,17 +304,17 @@ fn rejects_binding_after_lifecycle_execution_and_foreign_consumers() {
             events: Arc::new(Mutex::new(Vec::new())),
         })
         .unwrap();
-    futures::executor::block_on(service.run()).unwrap();
+    futures::executor::block_on(service.serve()).unwrap();
     assert!(service.bind(&provider, &dependency, &provider).is_err());
 
-    let mut first = Microservice::new();
+    let mut first = MicrodeApplication::new();
     let foreign = first
         .install_named("foreign", |_| GraphNode {
             relationship: dependency.descriptor(),
             provider: Provider::new(port.clone(), "foreign".to_owned()),
         })
         .unwrap();
-    let mut second = Microservice::new();
+    let mut second = MicrodeApplication::new();
     let local = second
         .install_named("local", |_| GraphNode {
             relationship: dependency.descriptor(),
@@ -326,7 +326,7 @@ fn rejects_binding_after_lifecycle_execution_and_foreign_consumers() {
             .bind(&foreign, &dependency, &local)
             .unwrap_err()
             .to_string(),
-        "module handle 'foreign' belongs to another microservice"
+        "module handle 'foreign' belongs to another application"
     );
 }
 
@@ -334,7 +334,7 @@ fn rejects_binding_after_lifecycle_execution_and_foreign_consumers() {
 fn provider_creation_failure_is_atomic_and_permanently_seals_composition() {
     let port = Port::<String>::new("factory");
     let dependency = Dependency::new("provider", port.clone());
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let consumer = service
         .install_named("consumer", |_| GraphNode {
             relationship: dependency.descriptor(),
@@ -344,14 +344,14 @@ fn provider_creation_failure_is_atomic_and_permanently_seals_composition() {
     let provider = service
         .install_named("provider", |_| FactoryProviderNode {
             provider: Provider::try_new(port.clone(), || {
-                Err(MicroserviceError::new("provider creation failed"))
+                Err(MicrodeError::new("provider creation failed"))
             }),
         })
         .unwrap();
     service.bind(&consumer, &dependency, &provider).unwrap();
 
     assert_eq!(
-        futures::executor::block_on(service.run())
+        futures::executor::block_on(service.serve())
             .unwrap_err()
             .to_string(),
         "provider creation failed"
@@ -359,15 +359,15 @@ fn provider_creation_failure_is_atomic_and_permanently_seals_composition() {
     assert!(service.install_named("late", |_| PassiveGraphNode).is_err());
     assert!(service.bind(&consumer, &dependency, &provider).is_err());
     assert_eq!(
-        futures::executor::block_on(service.run())
+        futures::executor::block_on(service.serve())
             .unwrap_err()
             .to_string(),
-        "cannot run microservice more than once; composition is sealed"
+        "cannot start application more than once; composition is sealed"
     );
 }
 
 struct PassiveGraphNode;
-impl MicroserviceModule for PassiveGraphNode {
+impl MicrodeModule for PassiveGraphNode {
     const KIND: ModuleKind = ModuleKind::Passive;
 }
 
@@ -379,7 +379,7 @@ struct FactoryProviderNode {
 fn validates_concrete_module_requirements_without_exposing_modules() {
     let port = Port::<Database>::for_module::<ProviderModule>("concrete-database");
     let dependency = Dependency::new("database", port.clone());
-    let mut valid = Microservice::new();
+    let mut valid = MicrodeApplication::new();
     let consumer = valid
         .install_named("consumer", |_| ConsumerModule {
             database: dependency.clone(),
@@ -395,7 +395,7 @@ fn validates_concrete_module_requirements_without_exposing_modules() {
         .unwrap();
     valid.bind(&consumer, &dependency, &provider).unwrap();
 
-    let mut invalid = Microservice::new();
+    let mut invalid = MicrodeApplication::new();
     let invalid_consumer = invalid
         .install_named("consumer", |_| ConsumerModule {
             database: dependency.clone(),
@@ -419,13 +419,13 @@ fn validates_concrete_module_requirements_without_exposing_modules() {
 struct ConcreteImpostor {
     provider: Provider,
 }
-impl MicroserviceModule for ConcreteImpostor {
+impl MicrodeModule for ConcreteImpostor {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn providers(&self) -> Vec<Provider> {
         vec![self.provider.clone()]
     }
 }
-impl MicroserviceModule for FactoryProviderNode {
+impl MicrodeModule for FactoryProviderNode {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn providers(&self) -> Vec<Provider> {
         vec![self.provider.clone()]

@@ -1,8 +1,8 @@
 ---
-title: Microservice
+title: MicrodeApplication
 ---
 
-# `Microservice`
+# `MicrodeApplication`
 
 Composes installed modules and coordinates their lifecycle.
 
@@ -19,7 +19,7 @@ Creates an idle service using the production module context. `Default::default()
 ### `state`
 
 ```rust
-pub fn state(&self) -> MicroserviceState
+pub fn state(&self) -> MicrodeApplicationState
 ```
 
 Returns the service's current lifecycle state.
@@ -27,10 +27,10 @@ Returns the service's current lifecycle state.
 ### `install`
 
 ```rust
-pub fn install<M, F>(&mut self, factory: F) -> Result<(), MicroserviceError>
+pub fn install<M, F>(&mut self, factory: F) -> Result<(), MicrodeError>
 where
-    M: MicroserviceModule + 'static,
-    F: FnOnce(MicroserviceContextHandle) -> M
+    M: MicrodeModule + 'static,
+    F: FnOnce(MicrodeContextHandle) -> M
 ```
 
 Installs an unnamed module. Use this when the module does not participate in explicit relationship binding.
@@ -42,10 +42,10 @@ pub fn install_named<M, F>(
     &mut self,
     id: impl Into<String>,
     factory: F,
-) -> Result<ModuleHandle<M>, MicroserviceError>
+) -> Result<ModuleHandle<M>, MicrodeError>
 where
-    M: MicroserviceModule + 'static,
-    F: FnOnce(MicroserviceContextHandle) -> M
+    M: MicrodeModule + 'static,
+    F: FnOnce(MicrodeContextHandle) -> M
 ```
 
 Installs a module under a unique stable ID and returns the handle used by [`bind`](#bind).
@@ -58,28 +58,40 @@ pub fn bind(
     consumer: &dyn ModuleHandleIdentity,
     slot: &dyn RelationshipSlot,
     target: &dyn ModuleHandleIdentity,
-) -> Result<(), MicroserviceError>
+) -> Result<(), MicrodeError>
 ```
 
 Binds one declared relationship on `consumer` to a provider exported by `target`. Both handles must belong to this service.
 
+### `serve`
+
+```rust
+pub fn serve(
+    &mut self,
+) -> BoxFuture<'static, Result<MicrodeExecutionResult, MicrodeError>>
+```
+
+Seals and validates the composition, starts the module-driven lifecycle immediately, and returns an owned completion future. Dropping the future does not cancel execution.
+
 ### `run`
 
 ```rust
-pub fn run(
+pub fn run<Main, MainFuture>(
     &mut self,
-) -> BoxFuture<'static, Result<MicroserviceExecutionResult, MicroserviceError>>
+    main: Main,
+) -> BoxFuture<'static, Result<MicrodeExecutionResult, MicrodeError>>
 ```
 
-Seals and validates the composition, starts the lifecycle immediately, and returns an owned completion future. Dropping the future does not cancel execution. A service can run only once.
+Starts the modules and then invokes `main`. Completion or failure of `main`
+begins orderly shutdown. An application can execute only once.
 
 ### `stop`
 
 ```rust
 pub fn stop(
     &self,
-    request: MicroserviceStopRequest,
-) -> BoxFuture<'static, Result<MicroserviceExecutionResult, MicroserviceError>>
+    request: MicrodeStopRequest,
+) -> BoxFuture<'static, Result<MicrodeExecutionResult, MicrodeError>>
 ```
 
 Requests an orderly stop and waits for the shared completion result. The first stop request wins.

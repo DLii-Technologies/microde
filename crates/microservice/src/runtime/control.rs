@@ -3,12 +3,12 @@ use std::sync::{Mutex, MutexGuard};
 use event_listener::Event;
 use futures::channel::oneshot;
 
-use crate::{MicroserviceError, MicroserviceExecutionResult, MicroserviceStopRequest};
+use crate::{MicrodeError, MicrodeExecutionResult, MicrodeStopRequest};
 
-pub(crate) type RuntimeResult = Result<MicroserviceExecutionResult, MicroserviceError>;
+pub(crate) type RuntimeResult = Result<MicrodeExecutionResult, MicrodeError>;
 
 pub(crate) struct RuntimeControl {
-    stop_request: Mutex<Option<MicroserviceStopRequest>>,
+    stop_request: Mutex<Option<MicrodeStopRequest>>,
     stop_sender: Mutex<Option<oneshot::Sender<()>>>,
     stop_receiver: Mutex<Option<oneshot::Receiver<()>>>,
     completion: Mutex<Option<RuntimeResult>>,
@@ -29,7 +29,7 @@ impl Default for RuntimeControl {
 }
 
 impl RuntimeControl {
-    pub(crate) fn request_stop(&self, request: MicroserviceStopRequest) {
+    pub(crate) fn request_stop(&self, request: MicrodeStopRequest) {
         let mut first_request = lock(&self.stop_request);
         if first_request.is_none() {
             *first_request = Some(request);
@@ -44,7 +44,7 @@ impl RuntimeControl {
         lock(&self.stop_request).is_some()
     }
 
-    pub(crate) fn stop_request(&self) -> Option<MicroserviceStopRequest> {
+    pub(crate) fn stop_request(&self) -> Option<MicrodeStopRequest> {
         lock(&self.stop_request).clone()
     }
 

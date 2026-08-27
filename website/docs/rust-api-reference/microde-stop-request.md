@@ -1,15 +1,15 @@
 ---
-title: MicroserviceStopRequest
+title: MicrodeStopRequest
 ---
 
-# `MicroserviceStopRequest`
+# `MicrodeStopRequest`
 
 A non-blocking request for orderly lifecycle termination.
 
 ```rust
-pub struct MicroserviceStopRequest {
+pub struct MicrodeStopRequest {
     pub exit_code: Option<i32>,
-    pub error: Option<MicroserviceError>,
+    pub error: Option<MicrodeError>,
 }
 ```
 

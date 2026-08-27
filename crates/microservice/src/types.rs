@@ -7,7 +7,7 @@ pub enum ModuleKind {
 
 /// The observable lifecycle state of a microservice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MicroserviceState {
+pub enum MicrodeApplicationState {
     Idle,
     Installing,
     Initialization,
@@ -37,20 +37,20 @@ mod tests {
     #[test]
     fn lifecycle_states_preserve_the_runtime_vocabulary() {
         let states = [
-            MicroserviceState::Idle,
-            MicroserviceState::Installing,
-            MicroserviceState::Initialization,
-            MicroserviceState::Setup,
-            MicroserviceState::Running,
-            MicroserviceState::TearDown,
-            MicroserviceState::Shutdown,
-            MicroserviceState::CleanUp,
-            MicroserviceState::Finished,
-            MicroserviceState::Failed,
+            MicrodeApplicationState::Idle,
+            MicrodeApplicationState::Installing,
+            MicrodeApplicationState::Initialization,
+            MicrodeApplicationState::Setup,
+            MicrodeApplicationState::Running,
+            MicrodeApplicationState::TearDown,
+            MicrodeApplicationState::Shutdown,
+            MicrodeApplicationState::CleanUp,
+            MicrodeApplicationState::Finished,
+            MicrodeApplicationState::Failed,
         ];
 
         assert_eq!(states.len(), 10);
-        assert_eq!(states[0], MicroserviceState::Idle);
-        assert_eq!(states[9], MicroserviceState::Failed);
+        assert_eq!(states[0], MicrodeApplicationState::Idle);
+        assert_eq!(states[9], MicrodeApplicationState::Failed);
     }
 }

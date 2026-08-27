@@ -9,12 +9,12 @@ struct ControlContext {
     control: Arc<RuntimeControl>,
 }
 
-impl MicroserviceContext for ControlContext {
-    fn request_stop(&self, request: MicroserviceStopRequest) {
+impl MicrodeContext for ControlContext {
+    fn request_stop(&self, request: MicrodeStopRequest) {
         self.control.request_stop(request);
     }
 
-    fn panic(&self, error: Option<MicroserviceError>) -> ! {
+    fn panic(&self, error: Option<MicrodeError>) -> ! {
         panic!("test panic: {error:?}");
     }
 }
@@ -22,14 +22,14 @@ impl MicroserviceContext for ControlContext {
 struct PhaseModule {
     name: &'static str,
     events: Arc<Mutex<Vec<String>>>,
-    context: MicroserviceContextHandle,
+    context: MicrodeContextHandle,
     fail_initialize: bool,
     fail_setup: bool,
     stop_during_initialize: bool,
     stop_during_setup: bool,
 }
 
-impl MicroserviceModule for PhaseModule {
+impl MicrodeModule for PhaseModule {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn initialize(&mut self) -> ModuleFuture {
         let event = format!("{}:initialize", self.name);
@@ -40,10 +40,10 @@ impl MicroserviceModule for PhaseModule {
         Box::pin(async move {
             events.lock().unwrap().push(event);
             if stop {
-                context.request_stop(MicroserviceStopRequest::success());
+                context.request_stop(MicrodeStopRequest::success());
             }
             if fail {
-                Err(MicroserviceError::new("initialization failed"))
+                Err(MicrodeError::new("initialization failed"))
             } else {
                 Ok(())
             }
@@ -59,10 +59,10 @@ impl MicroserviceModule for PhaseModule {
         Box::pin(async move {
             events.lock().unwrap().push(event);
             if stop {
-                context.request_stop(MicroserviceStopRequest::success());
+                context.request_stop(MicrodeStopRequest::success());
             }
             if fail {
-                Err(MicroserviceError::new("setup failed"))
+                Err(MicrodeError::new("setup failed"))
             } else {
                 Ok(())
             }
@@ -78,19 +78,19 @@ impl MicroserviceModule for PhaseModule {
     }
 }
 
-fn service() -> (Microservice, Arc<RuntimeControl>) {
+fn service() -> (MicrodeApplication, Arc<RuntimeControl>) {
     let control = Arc::new(RuntimeControl::default());
-    let context: MicroserviceContextHandle = Arc::new(ControlContext {
+    let context: MicrodeContextHandle = Arc::new(ControlContext {
         control: control.clone(),
     });
     (
-        Microservice::with_context_and_control(context, control.clone()),
+        MicrodeApplication::with_context_and_control(context, control.clone()),
         control,
     )
 }
 
 fn install(
-    service: &mut Microservice,
+    service: &mut MicrodeApplication,
     events: &Arc<Mutex<Vec<String>>>,
     name: &'static str,
     configure: impl FnOnce(&mut PhaseModule),
@@ -121,7 +121,7 @@ fn initializes_and_sets_up_in_installation_order_with_stage_tracking() {
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe({
         let context = service.context.clone();
-        move || context.panic(Some(MicroserviceError::new("fatal")))
+        move || context.panic(Some(MicrodeError::new("fatal")))
     }));
     assert!(panic.is_err());
 
@@ -170,7 +170,7 @@ fn initialization_failure_stops_forward_progress_and_preserves_stage() {
 
     let error = block_on(service.initialize_modules()).unwrap_err();
 
-    assert_eq!(error, MicroserviceError::new("initialization failed"));
+    assert_eq!(error, MicrodeError::new("initialization failed"));
     assert_eq!(service.modules[0].stage(), ModuleStage::Initializing);
     assert_eq!(service.modules[1].stage(), ModuleStage::Installed);
     assert_eq!(*events.lock().unwrap(), vec!["first:initialize"]);
@@ -188,7 +188,7 @@ fn setup_failure_stops_forward_progress_and_preserves_stage() {
 
     let error = block_on(service.setup_modules()).unwrap_err();
 
-    assert_eq!(error, MicroserviceError::new("setup failed"));
+    assert_eq!(error, MicrodeError::new("setup failed"));
     assert_eq!(service.modules[0].stage(), ModuleStage::SettingUp);
     assert_eq!(service.modules[1].stage(), ModuleStage::Initialized);
     assert_eq!(
@@ -225,12 +225,9 @@ fn stop_requested_during_setup_skips_remaining_modules_and_first_request_wins() 
     block_on(service.initialize_modules()).unwrap();
 
     block_on(service.setup_modules()).unwrap();
-    control.request_stop(MicroserviceStopRequest::with_exit_code(99));
+    control.request_stop(MicrodeStopRequest::with_exit_code(99));
 
-    assert_eq!(
-        control.stop_request(),
-        Some(MicroserviceStopRequest::success())
-    );
+    assert_eq!(control.stop_request(), Some(MicrodeStopRequest::success()));
     assert_eq!(service.modules[0].stage(), ModuleStage::SetUp);
     assert_eq!(service.modules[1].stage(), ModuleStage::Initialized);
     assert_eq!(

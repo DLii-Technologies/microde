@@ -1,14 +1,14 @@
 import {
-	type MicroserviceContext,
-	MicroserviceModule,
+	type MicrodeContext,
+	MicrodeModule,
 	ModuleKind,
 } from '@microde/microservice';
 
-export class PassiveModule extends MicroserviceModule {
+export class PassiveModule extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
 
 	constructor(
-		context: MicroserviceContext,
+		context: MicrodeContext,
 		protected readonly events: string[],
 		protected readonly name?: string,
 	) {

@@ -22,7 +22,7 @@ impl RecordingModule {
 
 struct PassiveRecording(RecordingModule);
 
-impl MicroserviceModule for PassiveRecording {
+impl MicrodeModule for PassiveRecording {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn initialize(&mut self) -> ModuleFuture {
@@ -50,7 +50,7 @@ impl MicroserviceModule for PassiveRecording {
 
 struct ActiveRecording(RecordingModule);
 
-impl MicroserviceModule for ActiveRecording {
+impl MicrodeModule for ActiveRecording {
     const KIND: ModuleKind = ModuleKind::Active;
 
     fn initialize(&mut self) -> ModuleFuture {

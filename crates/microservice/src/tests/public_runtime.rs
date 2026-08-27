@@ -9,10 +9,10 @@ use super::*;
 
 struct TestContext;
 
-impl MicroserviceContext for TestContext {
-    fn request_stop(&self, _request: MicroserviceStopRequest) {}
+impl MicrodeContext for TestContext {
+    fn request_stop(&self, _request: MicrodeStopRequest) {}
 
-    fn panic(&self, error: Option<MicroserviceError>) -> ! {
+    fn panic(&self, error: Option<MicrodeError>) -> ! {
         panic!("test panic: {error:?}");
     }
 }
@@ -36,7 +36,7 @@ impl FailingModule {
     fn result(phase: &'static str, fails: bool) -> ModuleFuture {
         Box::pin(async move {
             if fails {
-                Err(MicroserviceError::new(format!("{phase} failed")))
+                Err(MicrodeError::new(format!("{phase} failed")))
             } else {
                 Ok(())
             }
@@ -44,7 +44,7 @@ impl FailingModule {
     }
 }
 
-impl MicroserviceModule for FailingModule {
+impl MicrodeModule for FailingModule {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn initialize(&mut self) -> ModuleFuture {
         Self::result("initialize", self.initialize)
@@ -77,13 +77,13 @@ impl MicroserviceModule for FailingModule {
 
 struct StopFailingActive;
 
-impl MicroserviceModule for StopFailingActive {
+impl MicrodeModule for StopFailingActive {
     const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         Box::pin(std::future::pending())
     }
     fn stop(&mut self) -> ModuleFuture {
-        Box::pin(async { Err(MicroserviceError::new("stop failed")) })
+        Box::pin(async { Err(MicrodeError::new("stop failed")) })
     }
 }
 
@@ -97,7 +97,7 @@ impl StoppableActive {
     }
 }
 
-impl MicroserviceModule for StoppableActive {
+impl MicrodeModule for StoppableActive {
     const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         let completion = self.completion.take().unwrap();
@@ -117,8 +117,79 @@ impl MicroserviceModule for StoppableActive {
     }
 }
 
-fn service() -> Microservice {
-    Microservice::with_context(Arc::new(TestContext))
+fn service() -> MicrodeApplication {
+    MicrodeApplication::with_context(Arc::new(TestContext))
+}
+
+#[test]
+fn application_main_completion_stops_active_modules() {
+    let mut application = service();
+    application.install(|_| StoppableActive::new()).unwrap();
+
+    let result = block_on(application.run(|context| async move {
+        context.request_stop(MicrodeStopRequest::success());
+        Ok(())
+    }))
+    .unwrap();
+
+    assert_eq!(result.exit_code, 0);
+    assert_eq!(application.state(), MicrodeApplicationState::Finished);
+}
+
+#[test]
+fn application_main_failure_is_an_execution_error() {
+    let mut application = service();
+
+    let result =
+        block_on(application.run(|_| async { Err(MicrodeError::new("main failed")) })).unwrap();
+
+    assert_eq!(result.exit_code, 1);
+    assert_eq!(result.error, Some(MicrodeError::new("main failed")));
+    assert_eq!(application.state(), MicrodeApplicationState::Failed);
+}
+
+#[test]
+fn application_main_succeeds_without_modules() {
+    let mut application = service();
+
+    let result = block_on(application.run(|_| async { Ok(()) })).unwrap();
+
+    assert_eq!(result.exit_code, 0);
+    assert_eq!(result.error, None);
+    assert_eq!(application.state(), MicrodeApplicationState::Finished);
+}
+
+#[test]
+fn stop_interrupts_a_pending_main_without_modules() {
+    let mut application = service();
+    let (started, main_started) = oneshot::channel();
+    let execution = application.run(|_| async move {
+        let _ = started.send(());
+        std::future::pending::<Result<(), MicrodeError>>().await
+    });
+    block_on(main_started).unwrap();
+
+    let result = block_on(application.stop(MicrodeStopRequest::success())).unwrap();
+
+    assert_eq!(block_on(execution).unwrap(), result);
+    assert_eq!(application.state(), MicrodeApplicationState::Finished);
+}
+
+#[test]
+fn application_main_failure_stops_running_modules() {
+    let mut application = service();
+    application.install(|_| StoppableActive::new()).unwrap();
+
+    let result =
+        block_on(application.run(|_| async { Err(MicrodeError::new("main failed with modules")) }))
+            .unwrap();
+
+    assert_eq!(result.exit_code, 1);
+    assert_eq!(
+        result.error,
+        Some(MicrodeError::new("main failed with modules"))
+    );
+    assert_eq!(application.state(), MicrodeApplicationState::Failed);
 }
 
 #[test]
@@ -133,11 +204,11 @@ fn panic_messages_cover_string_and_unknown_payloads() {
     );
     assert_eq!(
         super::panic_message(Box::new(42_u32)),
-        "microservice lifecycle panicked"
+        "application lifecycle panicked"
     );
 }
 
-fn wait_for_state(service: &Microservice, expected: MicroserviceState) {
+fn wait_for_state(service: &MicrodeApplication, expected: MicrodeApplicationState) {
     let deadline = Instant::now() + Duration::from_secs(1);
     while service.state() != expected {
         assert!(
@@ -152,20 +223,20 @@ fn wait_for_state(service: &Microservice, expected: MicroserviceState) {
 fn run_completes_the_full_empty_lifecycle_once() {
     let mut service = service();
 
-    let result = block_on(service.run()).unwrap();
+    let result = block_on(service.serve()).unwrap();
 
     assert_eq!(
         result,
-        MicroserviceExecutionResult {
+        MicrodeExecutionResult {
             exit_code: 0,
             error: None,
             errors: None,
         }
     );
-    assert_eq!(service.state(), MicroserviceState::Finished);
+    assert_eq!(service.state(), MicrodeApplicationState::Finished);
     assert_eq!(
-        block_on(service.run()).unwrap_err().to_string(),
-        "cannot run microservice more than once; current state: Finished"
+        block_on(service.serve()).unwrap_err().to_string(),
+        "cannot start application more than once; current state: Finished"
     );
 }
 
@@ -174,10 +245,10 @@ fn stop_before_run_is_rejected() {
     let service = service();
 
     assert_eq!(
-        block_on(service.stop(MicroserviceStopRequest::success()))
+        block_on(service.stop(MicrodeStopRequest::success()))
             .unwrap_err()
             .to_string(),
-        "cannot stop microservice before it has started; current state: Idle"
+        "cannot stop application before it has started; current state: Idle"
     );
 }
 
@@ -186,13 +257,13 @@ fn stop_can_wait_for_an_owned_run_future_and_first_request_wins() {
     let mut service = service();
     service.install(|_| StoppableActive::new()).unwrap();
 
-    let run = service.run();
-    let first_stop = service.stop(MicroserviceStopRequest::with_exit_code(7));
-    let second_stop = service.stop(MicroserviceStopRequest::with_exit_code(9));
+    let run = service.serve();
+    let first_stop = service.stop(MicrodeStopRequest::with_exit_code(7));
+    let second_stop = service.stop(MicrodeStopRequest::with_exit_code(9));
     let ((first_result, second_result), run_result) =
         block_on(join(join(first_stop, second_stop), run));
 
-    let expected = MicroserviceExecutionResult {
+    let expected = MicrodeExecutionResult {
         exit_code: 7,
         error: None,
         errors: None,
@@ -200,7 +271,7 @@ fn stop_can_wait_for_an_owned_run_future_and_first_request_wins() {
     assert_eq!(run_result.unwrap(), expected);
     assert_eq!(first_result.unwrap(), expected);
     assert_eq!(second_result.unwrap(), expected);
-    assert_eq!(service.state(), MicroserviceState::Failed);
+    assert_eq!(service.state(), MicrodeApplicationState::Failed);
 }
 
 #[test]
@@ -212,12 +283,15 @@ fn initialization_and_setup_failures_are_returned_after_unwind() {
             ..FailingModule::default()
         })
         .unwrap();
-    let initialization_result = block_on(initialization_service.run()).unwrap();
+    let initialization_result = block_on(initialization_service.serve()).unwrap();
     assert_eq!(
         initialization_result.error,
-        Some(MicroserviceError::new("initialize failed"))
+        Some(MicrodeError::new("initialize failed"))
     );
-    assert_eq!(initialization_service.state(), MicroserviceState::Failed);
+    assert_eq!(
+        initialization_service.state(),
+        MicrodeApplicationState::Failed
+    );
 
     let mut setup_service = service();
     setup_service
@@ -226,12 +300,9 @@ fn initialization_and_setup_failures_are_returned_after_unwind() {
             ..FailingModule::default()
         })
         .unwrap();
-    let setup_result = block_on(setup_service.run()).unwrap();
-    assert_eq!(
-        setup_result.error,
-        Some(MicroserviceError::new("setup failed"))
-    );
-    assert_eq!(setup_service.state(), MicroserviceState::Failed);
+    let setup_result = block_on(setup_service.serve()).unwrap();
+    assert_eq!(setup_result.error, Some(MicrodeError::new("setup failed")));
+    assert_eq!(setup_service.state(), MicrodeApplicationState::Failed);
 }
 
 #[test]
@@ -243,21 +314,21 @@ fn execution_and_active_stop_failures_use_their_runtime_priorities() {
             ..FailingModule::default()
         })
         .unwrap();
-    let execution_result = block_on(execution_service.run()).unwrap();
+    let execution_result = block_on(execution_service.serve()).unwrap();
     assert_eq!(
         execution_result.error,
-        Some(MicroserviceError::new("run failed"))
+        Some(MicrodeError::new("run failed"))
     );
 
     let mut stop_service = service();
     stop_service.install(|_| StopFailingActive).unwrap();
-    let run = stop_service.run();
-    wait_for_state(&stop_service, MicroserviceState::Running);
-    let stop = stop_service.stop(MicroserviceStopRequest::success());
+    let run = stop_service.serve();
+    wait_for_state(&stop_service, MicrodeApplicationState::Running);
+    let stop = stop_service.stop(MicrodeStopRequest::success());
     let (stop_result, run_result) = block_on(join(stop, run));
-    let expected = MicroserviceExecutionResult {
+    let expected = MicrodeExecutionResult {
         exit_code: 1,
-        error: Some(MicroserviceError::new("stop failed")),
+        error: Some(MicrodeError::new("stop failed")),
         errors: None,
     };
     assert_eq!(stop_result.unwrap(), expected);
@@ -276,22 +347,19 @@ fn every_unwind_failure_is_retained_in_lifecycle_sequence() {
         })
         .unwrap();
 
-    let result = block_on(service.run()).unwrap();
+    let result = block_on(service.serve()).unwrap();
 
     assert_eq!(result.exit_code, 1);
-    assert_eq!(
-        result.error,
-        Some(MicroserviceError::new("teardown failed"))
-    );
+    assert_eq!(result.error, Some(MicrodeError::new("teardown failed")));
     assert_eq!(
         result.errors,
         Some(vec![
-            MicroserviceError::new("teardown failed"),
-            MicroserviceError::new("shutdown failed"),
-            MicroserviceError::new("cleanup failed"),
+            MicrodeError::new("teardown failed"),
+            MicrodeError::new("shutdown failed"),
+            MicrodeError::new("cleanup failed"),
         ])
     );
-    assert_eq!(service.state(), MicroserviceState::Failed);
+    assert_eq!(service.state(), MicrodeApplicationState::Failed);
 }
 
 #[test]
@@ -299,17 +367,17 @@ fn a_stop_request_error_has_highest_priority_in_the_final_result() {
     let mut service = service();
     service.install(|_| StoppableActive::new()).unwrap();
 
-    let run = service.run();
-    let stop_error = MicroserviceError::new("requested failure");
-    let stop = service.stop(MicroserviceStopRequest::with_error(stop_error.clone()));
+    let run = service.serve();
+    let stop_error = MicrodeError::new("requested failure");
+    let stop = service.stop(MicrodeStopRequest::with_error(stop_error.clone()));
     let (run_result, stop_result) = block_on(join(run, stop));
 
-    let expected = MicroserviceExecutionResult {
+    let expected = MicrodeExecutionResult {
         exit_code: 1,
         error: Some(stop_error),
         errors: None,
     };
     assert_eq!(run_result.unwrap(), expected);
     assert_eq!(stop_result.unwrap(), expected);
-    assert_eq!(service.state(), MicroserviceState::Failed);
+    assert_eq!(service.state(), MicrodeApplicationState::Failed);
 }

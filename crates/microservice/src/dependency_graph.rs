@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::{MicroserviceError, ModuleInstanceId};
+use crate::{MicrodeError, ModuleInstanceId};
 
 pub(crate) struct DependencyGraph {
     dependencies: BTreeMap<ModuleInstanceId, BTreeSet<ModuleInstanceId>>,
@@ -18,7 +18,7 @@ impl DependencyGraph {
         &mut self,
         consumer: &str,
         dependency: &str,
-    ) -> Result<(), MicroserviceError> {
+    ) -> Result<(), MicrodeError> {
         let consumer = self.find(consumer)?;
         let dependency = self.find(dependency)?;
         self.dependencies
@@ -39,7 +39,7 @@ impl DependencyGraph {
             .insert(dependency.clone());
     }
 
-    pub(crate) fn order(&self) -> Result<Vec<ModuleInstanceId>, MicroserviceError> {
+    pub(crate) fn order(&self) -> Result<Vec<ModuleInstanceId>, MicrodeError> {
         let mut ordered = Vec::new();
         let mut completed = BTreeSet::new();
         let mut active = Vec::new();
@@ -55,7 +55,7 @@ impl DependencyGraph {
         active: &mut Vec<ModuleInstanceId>,
         completed: &mut BTreeSet<ModuleInstanceId>,
         ordered: &mut Vec<ModuleInstanceId>,
-    ) -> Result<(), MicroserviceError> {
+    ) -> Result<(), MicrodeError> {
         if completed.contains(id) {
             return Ok(());
         }
@@ -66,7 +66,7 @@ impl DependencyGraph {
                 .map(ModuleInstanceId::as_str)
                 .collect::<Vec<_>>()
                 .join(" -> ");
-            return Err(MicroserviceError::new(format!(
+            return Err(MicrodeError::new(format!(
                 "dependency cycle detected: {cycle}"
             )));
         }
@@ -85,12 +85,12 @@ impl DependencyGraph {
     }
 
     #[cfg(test)]
-    fn find(&self, value: &str) -> Result<ModuleInstanceId, MicroserviceError> {
+    fn find(&self, value: &str) -> Result<ModuleInstanceId, MicrodeError> {
         self.dependencies
             .keys()
             .find(|id| id.as_str() == value)
             .cloned()
-            .ok_or_else(|| MicroserviceError::new(format!("unknown module instance ID '{value}'")))
+            .ok_or_else(|| MicrodeError::new(format!("unknown module instance ID '{value}'")))
     }
 }
 

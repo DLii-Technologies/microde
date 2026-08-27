@@ -36,14 +36,14 @@ Microde is published as an ECMAScript module and includes TypeScript declaration
 <TabItem value="typescript" label="TypeScript">
 
 ```ts
-import { Microservice } from '@microde/microservice';
+import { MicrodeApplication } from '@microde/microservice';
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::Microservice;
+use microde_microservice::MicrodeApplication;
 ```
 
 </TabItem>

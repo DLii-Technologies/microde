@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
 use futures::executor::block_on;
-use microde_microservice::{MicroserviceError, MicroserviceModule, ModuleFuture, ModuleKind};
+use microde_microservice::{MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
 
 struct PassiveTestModule {
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl MicroserviceModule for PassiveTestModule {
+impl MicrodeModule for PassiveTestModule {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         let events = self.events.clone();
@@ -30,10 +30,10 @@ struct ActiveTestModule {
     events: Arc<Mutex<Vec<&'static str>>>,
 }
 
-impl MicroserviceModule for ActiveTestModule {
+impl MicrodeModule for ActiveTestModule {
     const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
-        Box::pin(async { Err(MicroserviceError::new("run failed")) })
+        Box::pin(async { Err(MicrodeError::new("run failed")) })
     }
     fn stop(&mut self) -> ModuleFuture {
         let events = self.events.clone();
@@ -46,7 +46,7 @@ impl MicroserviceModule for ActiveTestModule {
 
 struct NoOpModule;
 
-impl MicroserviceModule for NoOpModule {
+impl MicrodeModule for NoOpModule {
     const KIND: ModuleKind = ModuleKind::Passive;
 }
 
@@ -85,7 +85,7 @@ fn active_modules_can_override_the_stop_operation() {
 
     assert_eq!(
         block_on(module.run()).unwrap_err(),
-        MicroserviceError::new("run failed")
+        MicrodeError::new("run failed")
     );
     block_on(module.stop()).unwrap();
 
@@ -103,9 +103,6 @@ fn an_active_run_can_remain_owned_while_stop_is_requested() {
     let stop = module.stop();
 
     block_on(stop).unwrap();
-    assert_eq!(
-        block_on(run).unwrap_err(),
-        MicroserviceError::new("run failed")
-    );
+    assert_eq!(block_on(run).unwrap_err(), MicrodeError::new("run failed"));
     assert_eq!(*events.lock().unwrap(), vec!["stop"]);
 }

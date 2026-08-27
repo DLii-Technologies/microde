@@ -8,10 +8,10 @@ use super::*;
 
 struct TestContext;
 
-impl MicroserviceContext for TestContext {
-    fn request_stop(&self, _request: MicroserviceStopRequest) {}
+impl MicrodeContext for TestContext {
+    fn request_stop(&self, _request: MicrodeStopRequest) {}
 
-    fn panic(&self, error: Option<MicroserviceError>) -> ! {
+    fn panic(&self, error: Option<MicrodeError>) -> ! {
         panic!("test panic: {error:?}");
     }
 }
@@ -19,10 +19,10 @@ impl MicroserviceContext for TestContext {
 struct PassiveRun {
     name: &'static str,
     events: Arc<Mutex<Vec<String>>>,
-    failure: Option<MicroserviceError>,
+    failure: Option<MicrodeError>,
 }
 
-impl MicroserviceModule for PassiveRun {
+impl MicrodeModule for PassiveRun {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         self.events
@@ -53,7 +53,7 @@ struct ActiveRun {
     completion: Option<oneshot::Receiver<()>>,
     release: Option<oneshot::Sender<()>>,
     completes_immediately: bool,
-    stop_failure: Option<MicroserviceError>,
+    stop_failure: Option<MicrodeError>,
 }
 
 struct FailedStopContinues {
@@ -62,7 +62,7 @@ struct FailedStopContinues {
     completed: Option<std::sync::mpsc::Sender<()>>,
 }
 
-impl MicroserviceModule for FailedStopContinues {
+impl MicrodeModule for FailedStopContinues {
     const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         let completion = self.completion.take().unwrap();
@@ -77,7 +77,7 @@ impl MicroserviceModule for FailedStopContinues {
         let release = self.release.take().unwrap();
         Box::pin(async move {
             let _ = release.send(());
-            Err(MicroserviceError::new("stop failed"))
+            Err(MicrodeError::new("stop failed"))
         })
     }
 }
@@ -107,12 +107,12 @@ impl ActiveRun {
     }
 
     fn with_stop_failure(mut self, message: &'static str) -> Self {
-        self.stop_failure = Some(MicroserviceError::new(message));
+        self.stop_failure = Some(MicrodeError::new(message));
         self
     }
 }
 
-impl MicroserviceModule for ActiveRun {
+impl MicrodeModule for ActiveRun {
     const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         self.events
@@ -151,20 +151,20 @@ impl MicroserviceModule for ActiveRun {
     }
 }
 
-fn service() -> Microservice {
-    Microservice::with_context(Arc::new(TestContext))
+fn service() -> MicrodeApplication {
+    MicrodeApplication::with_context(Arc::new(TestContext))
 }
 
 #[test]
 fn execution_test_context_and_closed_stop_signal_are_observable() {
     let context = TestContext;
-    context.request_stop(MicroserviceStopRequest::success());
+    context.request_stop(MicrodeStopRequest::success());
     let panic = std::panic::catch_unwind(|| context.panic(None));
     assert!(panic.is_err());
 
     let control = RuntimeControl::default();
     drop(control.take_stop_receiver());
-    control.request_stop(MicroserviceStopRequest::success());
+    control.request_stop(MicrodeStopRequest::success());
     assert!(control.stop_requested());
 }
 
@@ -183,16 +183,13 @@ fn all_passive_runs_settle_and_execution_failures_are_collected() {
         .install(|_| PassiveRun {
             name: "second",
             events: events.clone(),
-            failure: Some(MicroserviceError::new("passive failed")),
+            failure: Some(MicrodeError::new("passive failed")),
         })
         .unwrap();
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
-    assert_eq!(
-        errors.execution,
-        vec![MicroserviceError::new("passive failed")]
-    );
+    assert_eq!(errors.execution, vec![MicrodeError::new("passive failed")]);
     assert!(errors.stop.is_empty());
     assert!(
         service
@@ -217,7 +214,7 @@ fn an_active_completion_stops_active_modules_in_reverse_order() {
         .install(|_| ActiveRun::immediate("second", events.clone()))
         .unwrap();
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
     assert!(errors.execution.is_empty());
     assert!(errors.stop.is_empty());
@@ -251,7 +248,7 @@ fn passive_success_does_not_end_execution_while_an_active_run_remains() {
         .install(|_| ActiveRun::immediate("active", events.clone()))
         .unwrap();
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
     assert!(errors.execution.is_empty());
     assert!(errors.stop.is_empty());
@@ -270,9 +267,9 @@ fn a_stop_request_stops_and_awaits_an_active_run() {
         .unwrap();
     service
         .control
-        .request_stop(MicroserviceStopRequest::with_exit_code(4));
+        .request_stop(MicrodeStopRequest::with_exit_code(4));
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
     assert!(errors.execution.is_empty());
     assert!(errors.stop.is_empty());
@@ -294,16 +291,13 @@ fn a_passive_failure_triggers_active_shutdown() {
         .install(|_| PassiveRun {
             name: "passive",
             events: events.clone(),
-            failure: Some(MicroserviceError::new("passive failed")),
+            failure: Some(MicrodeError::new("passive failed")),
         })
         .unwrap();
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
-    assert_eq!(
-        errors.execution,
-        vec![MicroserviceError::new("passive failed")]
-    );
+    assert_eq!(errors.execution, vec![MicrodeError::new("passive failed")]);
     assert!(errors.stop.is_empty());
     assert_eq!(
         *events.lock().unwrap(),
@@ -329,17 +323,12 @@ fn stop_failures_are_recorded_while_successful_stops_are_awaited() {
             ActiveRun::pending("second", events.clone()).with_stop_failure("second stop failed")
         })
         .unwrap();
-    service
-        .control
-        .request_stop(MicroserviceStopRequest::success());
+    service.control.request_stop(MicrodeStopRequest::success());
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
     assert!(errors.execution.is_empty());
-    assert_eq!(
-        errors.stop,
-        vec![MicroserviceError::new("second stop failed")]
-    );
+    assert_eq!(errors.stop, vec![MicrodeError::new("second stop failed")]);
     assert_eq!(service.modules[0].stage(), ModuleStage::Executed);
     assert_eq!(service.modules[1].stage(), ModuleStage::Executing);
     assert_eq!(
@@ -368,17 +357,15 @@ fn multiple_stop_failures_follow_reverse_installation_order() {
             ActiveRun::pending("second", events.clone()).with_stop_failure("second stop failed")
         })
         .unwrap();
-    service
-        .control
-        .request_stop(MicroserviceStopRequest::success());
+    service.control.request_stop(MicrodeStopRequest::success());
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
     assert_eq!(
         errors.stop,
         vec![
-            MicroserviceError::new("second stop failed"),
-            MicroserviceError::new("first stop failed")
+            MicrodeError::new("second stop failed"),
+            MicrodeError::new("first stop failed")
         ]
     );
     assert_eq!(
@@ -399,13 +386,11 @@ fn a_run_continues_after_its_active_stop_fails() {
             completed: Some(completed),
         })
         .unwrap();
-    service
-        .control
-        .request_stop(MicroserviceStopRequest::success());
+    service.control.request_stop(MicrodeStopRequest::success());
 
-    let errors = block_on(service.execute_modules());
+    let errors = block_on(service.execute_modules(None));
 
-    assert_eq!(errors.stop, vec![MicroserviceError::new("stop failed")]);
+    assert_eq!(errors.stop, vec![MicrodeError::new("stop failed")]);
     completion_observed
         .recv_timeout(Duration::from_secs(1))
         .unwrap();

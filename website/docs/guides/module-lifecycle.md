@@ -18,7 +18,7 @@ Use each lifecycle phase for a distinct level of resource ownership.
 
 For modules without dependency edges, stable instance IDs provide the
 tie-breaker, so installation order does not change the lifecycle trace. Calling
-`run()` seals the composition before any lifecycle callback starts. Dependencies
+`serve()` and `run(main)` seal the composition before any lifecycle callback starts. Dependencies
 are available in `setup` and `run`; references are available only in `run` and
 do not affect ordering.
 

@@ -1,16 +1,13 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::{
-    MicroserviceError, ModuleKind, Provider, RelationshipDescriptor, RunContext, SetupContext,
-};
+use crate::{MicrodeError, ModuleKind, Provider, RelationshipDescriptor, RunContext, SetupContext};
 
 /// The object-safe future returned by module lifecycle operations.
-pub type ModuleFuture =
-    Pin<Box<dyn Future<Output = Result<(), MicroserviceError>> + Send + 'static>>;
+pub type ModuleFuture = Pin<Box<dyn Future<Output = Result<(), MicrodeError>> + Send + 'static>>;
 
-/// The lifecycle shared by every installed microservice module.
-pub trait MicroserviceModule: Send {
+/// The lifecycle shared by every installed Microde module.
+pub trait MicrodeModule: Send {
     /// Declares how the runtime interprets completion of [`Self::run`].
     const KIND: ModuleKind;
 
@@ -69,26 +66,26 @@ pub(crate) trait RuntimeModule: Send {
     fn cleanup(&mut self) -> ModuleFuture;
 }
 
-impl<Module: MicroserviceModule> RuntimeModule for Module {
+impl<Module: MicrodeModule> RuntimeModule for Module {
     fn initialize(&mut self) -> ModuleFuture {
-        MicroserviceModule::initialize(self)
+        MicrodeModule::initialize(self)
     }
     fn setup_with_context(&mut self, context: SetupContext) -> ModuleFuture {
-        MicroserviceModule::setup_with_context(self, context)
+        MicrodeModule::setup_with_context(self, context)
     }
     fn run_with_context(&mut self, context: RunContext) -> ModuleFuture {
-        MicroserviceModule::run_with_context(self, context)
+        MicrodeModule::run_with_context(self, context)
     }
     fn stop(&mut self) -> ModuleFuture {
-        MicroserviceModule::stop(self)
+        MicrodeModule::stop(self)
     }
     fn teardown(&mut self) -> ModuleFuture {
-        MicroserviceModule::teardown(self)
+        MicrodeModule::teardown(self)
     }
     fn shutdown(&mut self) -> ModuleFuture {
-        MicroserviceModule::shutdown(self)
+        MicrodeModule::shutdown(self)
     }
     fn cleanup(&mut self) -> ModuleFuture {
-        MicroserviceModule::cleanup(self)
+        MicrodeModule::cleanup(self)
     }
 }
