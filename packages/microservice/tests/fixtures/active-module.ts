@@ -1,11 +1,11 @@
-import type { MicroserviceContext } from '@microde/microservice';
-import { MicroserviceModule, ModuleKind } from '@microde/microservice';
+import type { MicrodeContext } from '@microde/microservice';
+import { MicrodeModule, ModuleKind } from '@microde/microservice';
 
-export class ActiveModule extends MicroserviceModule {
+export class ActiveModule extends MicrodeModule {
 	readonly kind = ModuleKind.Active;
 
 	constructor(
-		context: MicroserviceContext,
+		context: MicrodeContext,
 		events: string[],
 		name?: string,
 		private readonly completion: Promise<void> = Promise.resolve(),

@@ -4,17 +4,17 @@ use super::*;
 
 struct TestContext;
 
-impl MicroserviceContext for TestContext {
-    fn request_stop(&self, _request: MicroserviceStopRequest) {}
+impl MicrodeContext for TestContext {
+    fn request_stop(&self, _request: MicrodeStopRequest) {}
 
-    fn panic(&self, error: Option<MicroserviceError>) -> ! {
+    fn panic(&self, error: Option<MicrodeError>) -> ! {
         panic!("test panic: {error:?}");
     }
 }
 
 struct Passive;
 
-impl MicroserviceModule for Passive {
+impl MicrodeModule for Passive {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
@@ -27,7 +27,7 @@ impl MicroserviceModule for Passive {
 
 struct Active;
 
-impl MicroserviceModule for Active {
+impl MicrodeModule for Active {
     const KIND: ModuleKind = ModuleKind::Active;
     fn run(&mut self) -> ModuleFuture {
         Box::pin(async { Ok(()) })
@@ -38,8 +38,8 @@ impl MicroserviceModule for Active {
 }
 
 fn passive_factory(
-    received: Arc<Mutex<Vec<MicroserviceContextHandle>>>,
-) -> impl FnOnce(MicroserviceContextHandle) -> Passive {
+    received: Arc<Mutex<Vec<MicrodeContextHandle>>>,
+) -> impl FnOnce(MicrodeContextHandle) -> Passive {
     move |context| {
         received.lock().unwrap().push(context);
         Passive
@@ -47,29 +47,29 @@ fn passive_factory(
 }
 
 fn active_factory(
-    received: Arc<Mutex<Vec<MicroserviceContextHandle>>>,
-) -> impl FnOnce(MicroserviceContextHandle) -> Active {
+    received: Arc<Mutex<Vec<MicrodeContextHandle>>>,
+) -> impl FnOnce(MicrodeContextHandle) -> Active {
     move |context| {
         received.lock().unwrap().push(context);
         Active
     }
 }
 
-fn panicking_factory() -> impl FnOnce(MicroserviceContextHandle) -> Passive {
+fn panicking_factory() -> impl FnOnce(MicrodeContextHandle) -> Passive {
     |_| panic!("factory failed")
 }
 
-fn named_passive_factory(_: MicroserviceContextHandle) -> Passive {
+fn named_passive_factory(_: MicrodeContextHandle) -> Passive {
     Passive
 }
 
 #[test]
 fn installs_passive_and_active_modules_in_order_with_the_shared_context() {
-    let context: MicroserviceContextHandle = Arc::new(TestContext);
-    let mut microservice = Microservice::with_context(context.clone());
+    let context: MicrodeContextHandle = Arc::new(TestContext);
+    let mut microservice = MicrodeApplication::with_context(context.clone());
     let received_contexts = Arc::new(Mutex::new(Vec::new()));
 
-    context.request_stop(MicroserviceStopRequest::success());
+    context.request_stop(MicrodeStopRequest::success());
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe({
         let context = context.clone();
         move || context.panic(None)
@@ -83,7 +83,7 @@ fn installs_passive_and_active_modules_in_order_with_the_shared_context() {
         .install(active_factory(received_contexts.clone()))
         .unwrap();
 
-    assert_eq!(microservice.state(), MicroserviceState::Idle);
+    assert_eq!(microservice.state(), MicrodeApplicationState::Idle);
     assert_eq!(
         microservice
             .modules
@@ -113,11 +113,11 @@ fn installs_passive_and_active_modules_in_order_with_the_shared_context() {
 
 #[test]
 fn rejects_installation_after_execution_has_started() {
-    let context: MicroserviceContextHandle = Arc::new(TestContext);
-    let mut microservice = Microservice::with_context(context);
-    microservice.set_state(MicroserviceState::Running);
+    let context: MicrodeContextHandle = Arc::new(TestContext);
+    let mut microservice = MicrodeApplication::with_context(context);
+    microservice.set_state(MicrodeApplicationState::Running);
     let received_contexts = Arc::new(Mutex::new(Vec::new()));
-    let mut idle = Microservice::with_context(Arc::new(TestContext));
+    let mut idle = MicrodeApplication::with_context(Arc::new(TestContext));
     idle.install_named("named", named_passive_factory).unwrap();
 
     let error = microservice
@@ -132,7 +132,7 @@ fn rejects_installation_after_execution_has_started() {
 
     assert_eq!(
         error.to_string(),
-        "cannot install module after microservice has started; current state: Running"
+        "cannot install module after application has started; current state: Running"
     );
     assert_eq!(active_error, error);
     assert_eq!(named_error, error);
@@ -141,25 +141,25 @@ fn rejects_installation_after_execution_has_started() {
 
 #[test]
 fn restores_idle_state_when_a_factory_panics() {
-    let context: MicroserviceContextHandle = Arc::new(TestContext);
-    let mut microservice = Microservice::with_context(context);
+    let context: MicrodeContextHandle = Arc::new(TestContext);
+    let mut microservice = MicrodeApplication::with_context(context);
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = microservice.install(panicking_factory());
     }));
 
     assert!(panic.is_err());
-    assert_eq!(microservice.state(), MicroserviceState::Idle);
+    assert_eq!(microservice.state(), MicrodeApplicationState::Idle);
     assert!(microservice.modules.is_empty());
 
-    microservice.set_state(MicroserviceState::Running);
+    microservice.set_state(MicrodeApplicationState::Running);
     assert!(microservice.install(panicking_factory()).is_err());
 }
 
 #[test]
 fn named_installation_returns_an_opaque_stable_handle() {
-    let context: MicroserviceContextHandle = Arc::new(TestContext);
-    let mut microservice = Microservice::with_context(context);
+    let context: MicrodeContextHandle = Arc::new(TestContext);
+    let mut microservice = MicrodeApplication::with_context(context);
 
     let first = microservice.install_named("first", |_| Passive).unwrap();
     let second = microservice.install_named("second", |_| Passive).unwrap();
@@ -175,8 +175,8 @@ fn named_installation_returns_an_opaque_stable_handle() {
 
 #[test]
 fn duplicate_named_installation_is_rejected_before_factory_evaluation() {
-    let context: MicroserviceContextHandle = Arc::new(TestContext);
-    let mut microservice = Microservice::with_context(context);
+    let context: MicrodeContextHandle = Arc::new(TestContext);
+    let mut microservice = MicrodeApplication::with_context(context);
     microservice.install_named("worker", |_| Passive).unwrap();
     let evaluated = Arc::new(Mutex::new(false));
 
@@ -195,5 +195,5 @@ fn duplicate_named_installation_is_rejected_before_factory_evaluation() {
         "module instance ID 'worker' is already installed"
     );
     assert!(!*evaluated.lock().unwrap());
-    assert_eq!(microservice.state(), MicroserviceState::Idle);
+    assert_eq!(microservice.state(), MicrodeApplicationState::Idle);
 }

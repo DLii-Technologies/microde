@@ -6,7 +6,7 @@ title: Stopping and errors
 
 ## Request an orderly stop
 
-Call `stop()` after execution has started. It requests an orderly unwind. Await the promise returned by `run()` to receive the final result:
+Call `stop()` after execution has started. It requests an orderly unwind. Await the promise returned by `serve()` or `run(main)` to receive the final result:
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -15,7 +15,7 @@ import TabItem from '@theme/TabItem';
 <TabItem value="typescript" label="TypeScript">
 
 ```ts
-const execution = service.run();
+const execution = service.serve();
 
 process.once('SIGTERM', () => {
 	service.stop();
@@ -29,10 +29,10 @@ process.exitCode = result.exitCode;
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::MicroserviceStopRequest;
+use microde_microservice::MicrodeStopRequest;
 
-let execution = service.run();
-service.stop(MicroserviceStopRequest::success());
+let execution = service.serve();
+service.stop(MicrodeStopRequest::success());
 let result = execution.await?;
 assert_eq!(result.exit_code, 0);
 ```
@@ -55,13 +55,13 @@ service.stop(2, new Error('invalid configuration'));
 <TabItem value="rust" label="Rust">
 
 ```rust
-service.stop(MicroserviceStopRequest::with_exit_code(2));
-service.stop(MicroserviceStopRequest::with_error(
-    MicroserviceError::new("lost connection"),
+service.stop(MicrodeStopRequest::with_exit_code(2));
+service.stop(MicrodeStopRequest::with_error(
+    MicrodeError::new("lost connection"),
 ));
-service.stop(MicroserviceStopRequest::with_exit_code_and_error(
+service.stop(MicrodeStopRequest::with_exit_code_and_error(
     2,
-    MicroserviceError::new("invalid configuration"),
+    MicrodeError::new("invalid configuration"),
 ));
 ```
 
@@ -90,7 +90,7 @@ flowchart TD
 ```
 
 Every orderly trigger joins the same unwind path. Multiple callers waiting on
-`run()` or Rust's `stop()` receive the same completed result.
+`serve()`, `run(main)`, or Rust's `stop()` receive the same completed result.
 
 ## Handle lifecycle failures
 
@@ -100,7 +100,7 @@ Lifecycle failures do not reject the main execution promise. Inspect the returne
 <TabItem value="typescript" label="TypeScript">
 
 ```ts
-const result = await service.run();
+const result = await service.serve();
 
 if (result.errors) {
 	for (const error of result.errors) {
@@ -115,7 +115,7 @@ if (result.errors) {
 <TabItem value="rust" label="Rust">
 
 ```rust
-let result = service.run().await?;
+let result = service.serve().await?;
 
 if let Some(errors) = result.errors {
     for error in errors {

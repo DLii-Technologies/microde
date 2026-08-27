@@ -12,4 +12,4 @@ pub trait RelationshipSlot {
 }
 ```
 
-`Microservice::bind` accepts this trait so either relationship kind can be bound. Modules also use `descriptor()` when returning their declared relationships.
+`MicrodeApplication::bind` accepts this trait so either relationship kind can be bound. Modules also use `descriptor()` when returning their declared relationships.

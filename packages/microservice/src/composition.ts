@@ -1,4 +1,4 @@
-import type { MicroserviceModule } from './microservice-module.js';
+import type { MicrodeModule } from './microde-module.js';
 
 declare const moduleType: unique symbol;
 const owners = new WeakMap<object, object>();
@@ -7,12 +7,12 @@ const owners = new WeakMap<object, object>();
 export type ModuleInstanceId = string;
 
 /** Opaque binding target for one installed module instance. */
-export interface ModuleHandle<Module extends MicroserviceModule> {
+export interface ModuleHandle<Module extends MicrodeModule> {
 	readonly id: ModuleInstanceId;
 	readonly [moduleType]: Module;
 }
 
-export function createModuleHandle<Module extends MicroserviceModule>(
+export function createModuleHandle<Module extends MicrodeModule>(
 	id: ModuleInstanceId,
 	owner: object,
 ): ModuleHandle<Module> {
@@ -22,7 +22,7 @@ export function createModuleHandle<Module extends MicroserviceModule>(
 }
 
 export function isModuleHandleOwnedBy(
-	handle: ModuleHandle<MicroserviceModule>,
+	handle: ModuleHandle<MicrodeModule>,
 	owner: object,
 ): boolean {
 	return owners.get(handle) === owner;

@@ -1,4 +1,4 @@
-use crate::{MicroserviceError, MicroserviceExecutionResult};
+use crate::{MicrodeError, MicrodeExecutionResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ErrorPriority {
@@ -9,7 +9,7 @@ pub(crate) enum ErrorPriority {
 }
 
 struct RecordedError {
-    error: MicroserviceError,
+    error: MicrodeError,
     priority: ErrorPriority,
     sequence: u64,
 }
@@ -21,7 +21,7 @@ pub(crate) struct ErrorRecorder {
 }
 
 impl ErrorRecorder {
-    pub(crate) fn record(&mut self, error: MicroserviceError, priority: ErrorPriority) {
+    pub(crate) fn record(&mut self, error: MicrodeError, priority: ErrorPriority) {
         self.errors.push(RecordedError {
             error,
             priority,
@@ -30,9 +30,9 @@ impl ErrorRecorder {
         self.next_sequence += 1;
     }
 
-    pub(crate) fn into_result(mut self, exit_code: Option<i32>) -> MicroserviceExecutionResult {
+    pub(crate) fn into_result(mut self, exit_code: Option<i32>) -> MicrodeExecutionResult {
         if self.errors.is_empty() {
-            return MicroserviceExecutionResult {
+            return MicrodeExecutionResult {
                 exit_code: exit_code.unwrap_or(0),
                 error: None,
                 errors: None,
@@ -51,7 +51,7 @@ impl ErrorRecorder {
             .map(|recorded| recorded.error)
             .collect::<Vec<_>>();
 
-        MicroserviceExecutionResult {
+        MicrodeExecutionResult {
             exit_code: exit_code.unwrap_or(1),
             error: errors.first().cloned(),
             errors: (errors.len() > 1).then_some(errors),

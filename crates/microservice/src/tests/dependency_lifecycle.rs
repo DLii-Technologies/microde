@@ -23,7 +23,7 @@ impl FixtureNode {
     }
 }
 
-impl MicroserviceModule for FixtureNode {
+impl MicrodeModule for FixtureNode {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn relationships(&self) -> Vec<RelationshipDescriptor> {
         self.relationships.clone()
@@ -39,7 +39,7 @@ impl MicroserviceModule for FixtureNode {
         self.record("setup");
         let error = self
             .fail_setup
-            .then(|| MicroserviceError::new(format!("setup:{}", self.name)));
+            .then(|| MicrodeError::new(format!("setup:{}", self.name)));
         Box::pin(async move { error.map_or(Ok(()), Err) })
     }
     fn run(&mut self) -> ModuleFuture {
@@ -81,7 +81,7 @@ fn run_fixture(
     edges: &[Edge<'_>],
     permutation: &[&str],
     fail_setup: Option<&str>,
-) -> (Vec<String>, Option<MicroserviceError>) {
+) -> (Vec<String>, Option<MicrodeError>) {
     let events = Arc::new(Mutex::new(Vec::new()));
     let port = Port::<String>::new("fixture");
     let mut slots: HashMap<String, Vec<Box<dyn RelationshipSlot>>> = HashMap::new();
@@ -99,7 +99,7 @@ fn run_fixture(
             .or_default()
             .push(slot);
     }
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let mut handles: HashMap<String, ModuleHandle<FixtureNode>> = HashMap::new();
     for name in permutation {
         let provided_name = (*name).to_owned();
@@ -131,7 +131,7 @@ fn run_fixture(
             )
             .unwrap();
     }
-    let result = futures::executor::block_on(service.run()).unwrap();
+    let result = futures::executor::block_on(service.serve()).unwrap();
     assert_eq!(names.len(), permutation.len());
     let captured = events.lock().unwrap().clone();
     (captured, result.error)
@@ -273,7 +273,7 @@ fn setup_failure_unwinds_by_graph_stage_and_reverse_order() {
         },
     ];
     let (events, error) = run_fixture(&["a", "b", "c"], &edges, &["a", "c", "b"], Some("b"));
-    assert_eq!(error, Some(MicroserviceError::new("setup:b")));
+    assert_eq!(error, Some(MicrodeError::new("setup:b")));
     assert_eq!(
         events,
         vec![

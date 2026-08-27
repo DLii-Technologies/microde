@@ -1,4 +1,4 @@
-import type { MicroserviceContext } from './microservice-context.js';
+import type { MicrodeContext } from './microde-context.js';
 import type { Provider } from './provider.js';
 import type { RelationshipHandle } from './relationship.js';
 import type { RunContext, SetupContext } from './lifecycle-context.js';
@@ -10,13 +10,13 @@ export enum ModuleKind {
 }
 
 /**
- * Defines the lifecycle shared by every module installed in a microservice.
+ * Defines the lifecycle shared by every module installed in a Microde application.
  *
  * Lifecycle methods run in phase order. Initialization and setup run in installation
  * order, while teardown, shutdown, and cleanup run in reverse installation order.
  * Each module declares its kind and can override the default no-op `run` and `stop`.
  */
-export abstract class MicroserviceModule {
+export abstract class MicrodeModule {
 	abstract readonly kind: ModuleKind;
 	/** Relationship slots declared by this module instance. */
 	readonly relationships: readonly RelationshipHandle[] = [];
@@ -24,7 +24,7 @@ export abstract class MicroserviceModule {
 	readonly providers: readonly Provider<unknown>[] = [];
 
 	/** Creates a module operating within the supplied microservice context. */
-	constructor(protected readonly context: MicroserviceContext) {}
+	constructor(protected readonly context: MicrodeContext) {}
 
 	/** Acquires resources needed to configure the module. */
 	async initialize(): Promise<void> {}

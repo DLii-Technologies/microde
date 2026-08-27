@@ -29,16 +29,16 @@ Create a module, install it in a service, and run the service:
 
 ```ts
 import {
-	Microservice,
-	type MicroserviceContext,
-	MicroserviceModule,
+	MicrodeApplication,
+	type MicrodeContext,
+	MicrodeModule,
 	ModuleKind,
 } from '@microde/microservice';
 
-class GreetingModule extends MicroserviceModule {
+class GreetingModule extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
 
-	constructor(context: MicroserviceContext) {
+	constructor(context: MicrodeContext) {
 		super(context);
 	}
 
@@ -49,10 +49,10 @@ class GreetingModule extends MicroserviceModule {
 	async stop(): Promise<void> {}
 }
 
-const service = new Microservice();
+const service = new MicrodeApplication();
 service.install((context) => new GreetingModule(context));
 
-const result = await service.run();
+const result = await service.serve();
 
 if (result.error !== undefined) {
 	console.error(result.error);
@@ -61,13 +61,22 @@ if (result.error !== undefined) {
 process.exitCode = result.exitCode;
 ```
 
+For a finite application task, use `run(main)` instead. Modules start before the
+main callback, and its completion begins orderly shutdown:
+
+```ts
+const result = await service.run(async (context) => {
+	await performWork();
+});
+```
+
 A service initializes and sets up modules in dependency-first order, then tears
 them down, shuts them down, and cleans them up in reverse order. Lifecycle
 failures are returned in the execution result after cleanup completes.
 
 Declare `ModuleKind.Passive` for work whose `run()` finishes on its own and
 `ModuleKind.Active` for work whose `run()` finishes only after `stop()`.
-Modules receive a `MicroserviceContext`, which exposes only the `requestStop()` and
+Modules receive a `MicrodeContext`, which exposes only the `requestStop()` and
 `panic()` operations they need from their owning service.
 
 Named installations return opaque handles that bind relationship slots to exact
@@ -80,11 +89,11 @@ equivalent model through `ModuleHandle`, `Port`, `Provider`, `Dependency`, and
 The Rust runtime can be used like this:
 
 ```rust
-use microde_microservice::{Microservice, MicroserviceError, MicroserviceModule, ModuleFuture, ModuleKind};
+use microde_microservice::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Greeting;
 
-impl MicroserviceModule for Greeting {
+impl MicrodeModule for Greeting {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn run(&mut self) -> ModuleFuture {
@@ -93,10 +102,10 @@ impl MicroserviceModule for Greeting {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), MicroserviceError> {
-    let mut service = Microservice::new();
+async fn main() -> Result<(), MicrodeError> {
+    let mut service = MicrodeApplication::new();
     service.install(|_| Greeting)?;
-    service.run().await?;
+    service.serve().await?;
     Ok(())
 }
 ```

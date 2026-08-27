@@ -2,7 +2,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{Dependency, MicroserviceError, ModuleInstanceId, Reference, RelationshipKind};
+use crate::{Dependency, MicrodeError, ModuleInstanceId, Reference, RelationshipKind};
 
 #[derive(Clone)]
 pub(crate) struct ResolvedRelationship {
@@ -32,7 +32,7 @@ impl SetupContext {
         Self { owner, resolutions }
     }
 
-    pub fn use_dependency<T>(&self, relationship: &Dependency<T>) -> Result<T, MicroserviceError>
+    pub fn use_dependency<T>(&self, relationship: &Dependency<T>) -> Result<T, MicrodeError>
     where
         T: Clone + Send + Sync + 'static,
     {
@@ -77,7 +77,7 @@ impl RunContext {
         Self { owner, resolutions }
     }
 
-    pub fn use_relationship<T, Slot>(&self, relationship: &Slot) -> Result<T, MicroserviceError>
+    pub fn use_relationship<T, Slot>(&self, relationship: &Slot) -> Result<T, MicrodeError>
     where
         T: Clone + Send + Sync + 'static,
         Slot: RunRelationship<T>,
@@ -98,7 +98,7 @@ fn resolve<T>(
     slot_id: u64,
     name: &str,
     expected_kind: Option<RelationshipKind>,
-) -> Result<T, MicroserviceError>
+) -> Result<T, MicrodeError>
 where
     T: Clone + Send + Sync + 'static,
 {
@@ -106,21 +106,21 @@ where
         .get(&slot_id)
         .filter(|value| &value.owner == owner)
         .ok_or_else(|| {
-            MicroserviceError::new(format!(
+            MicrodeError::new(format!(
                 "relationship '{}.{}' is not resolved for this module",
                 owner.as_str(),
                 name
             ))
         })?;
     if expected_kind.is_some_and(|kind| resolved.kind != kind) {
-        return Err(MicroserviceError::new(format!(
+        return Err(MicrodeError::new(format!(
             "relationship '{}.{}' is not available during setup",
             owner.as_str(),
             resolved.name
         )));
     }
     resolved.value.downcast_ref::<T>().cloned().ok_or_else(|| {
-        MicroserviceError::new(format!(
+        MicrodeError::new(format!(
             "provider type mismatch for relationship '{}.{}'",
             owner.as_str(),
             resolved.name

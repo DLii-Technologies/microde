@@ -1,13 +1,13 @@
 ---
-title: MicroserviceState
+title: MicrodeApplicationState
 ---
 
-# `MicroserviceState`
+# `MicrodeApplicationState`
 
-The observable lifecycle state returned by `Microservice::state()`.
+The observable lifecycle state returned by `MicrodeApplication::state()`.
 
 ```rust
-pub enum MicroserviceState {
+pub enum MicrodeApplicationState {
     Idle,
     Installing,
     Initialization,

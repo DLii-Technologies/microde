@@ -18,13 +18,13 @@ Rust-native traits, owned futures, and `Result`-based errors.
 
 ### Runtime
 
-- [`Microservice`](./rust-api-reference/microservice.md) installs modules, binds relationships, and coordinates execution.
-- [`MicroserviceModule`](./rust-api-reference/microservice-module.md) defines the module lifecycle.
-- [`MicroserviceContext`](./rust-api-reference/microservice-context.md) lets modules request a stop or terminate immediately.
-- [`MicroserviceStopRequest`](./rust-api-reference/microservice-stop-request.md) describes an orderly shutdown request.
-- [`MicroserviceExecutionResult`](./rust-api-reference/microservice-execution-result.md) reports the final outcome.
-- [`MicroserviceState`](./rust-api-reference/microservice-state.md) and [`ModuleKind`](./rust-api-reference/module-kind.md) describe runtime behavior.
-- [`MicroserviceError`](./rust-api-reference/microservice-error.md) is the error type returned by the runtime.
+- [`MicrodeApplication`](./rust-api-reference/microde-application.md) installs modules, binds relationships, and coordinates execution.
+- [`MicrodeModule`](./rust-api-reference/microde-module.md) defines the module lifecycle.
+- [`MicrodeContext`](./rust-api-reference/microde-context.md) lets modules request a stop or terminate immediately.
+- [`MicrodeStopRequest`](./rust-api-reference/microde-stop-request.md) describes an orderly shutdown request.
+- [`MicrodeExecutionResult`](./rust-api-reference/microde-execution-result.md) reports the final outcome.
+- [`MicrodeApplicationState`](./rust-api-reference/microde-application-state.md) and [`ModuleKind`](./rust-api-reference/module-kind.md) describe runtime behavior.
+- [`MicrodeError`](./rust-api-reference/microde-error.md) is the error type returned by the runtime.
 
 ### Modules and composition
 
@@ -38,18 +38,18 @@ Rust-native traits, owned futures, and `Result`-based errors.
 
 - [`RelationshipKind`](./rust-api-reference/relationship-kind.md), [`RelationshipDescriptor`](./rust-api-reference/relationship-descriptor.md), and [`RelationshipSlot`](./rust-api-reference/relationship-slot.md) describe relationship metadata used by composition.
 - [`RunRelationship`](./rust-api-reference/run-relationship.md) is implemented by slots accepted by `RunContext`.
-- [`MicroserviceContextHandle`](./rust-api-reference/microservice-context-handle.md) is an independently owned module context.
+- [`MicrodeContextHandle`](./rust-api-reference/microde-context-handle.md) is an independently owned module context.
 
 ## Module implementation
 
 Modules declare their kind and override lifecycle methods as needed:
 
 ```rust
-use microde_microservice::{MicroserviceModule, ModuleFuture, ModuleKind};
+use microde_microservice::{MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Worker;
 
-impl MicroserviceModule for Worker {
+impl MicrodeModule for Worker {
     const KIND: ModuleKind = ModuleKind::Passive;
 
     fn run(&mut self) -> ModuleFuture {
@@ -69,7 +69,7 @@ phases the module needs.
 
 `install_named` returns an opaque `ModuleHandle` for one stable module instance.
 Handles are required when binding relationships and cannot be used across
-different `Microservice` values.
+different `MicrodeApplication` values.
 
 ```rust
 let database = service.install_named("database", |_| DatabaseModule::new())?;
@@ -77,7 +77,7 @@ let orders = service.install_named("orders", |_| OrdersModule::new())?;
 service.bind(&orders, &orders_database, &database)?;
 ```
 
-Calling `run` seals the composition. Bindings, providers, and dependency cycles
+Calling `serve` or `run` seals the composition. Bindings, providers, and dependency cycles
 are validated before any lifecycle callback starts.
 
 ## Ports, providers, and relationships

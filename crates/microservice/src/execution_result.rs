@@ -1,12 +1,12 @@
-use crate::MicroserviceError;
+use crate::MicrodeError;
 
 /// The outcome returned after a microservice finishes its lifecycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MicroserviceExecutionResult {
+pub struct MicrodeExecutionResult {
     /// The suggested process exit code.
     pub exit_code: i32,
     /// The highest-priority lifecycle error, when one occurred.
-    pub error: Option<MicroserviceError>,
+    pub error: Option<MicrodeError>,
     /// Every lifecycle error in priority order when more than one occurred.
-    pub errors: Option<Vec<MicroserviceError>>,
+    pub errors: Option<Vec<MicrodeError>>,
 }

@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
 
-use crate::MicroserviceModule;
+use crate::MicrodeModule;
 
 /// Stable identity of one installed module instance.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,7 +18,7 @@ impl ModuleInstanceId {
 }
 
 /// Opaque binding target for one installed module instance.
-pub struct ModuleHandle<Module: MicroserviceModule> {
+pub struct ModuleHandle<Module: MicrodeModule> {
     id: ModuleInstanceId,
     pub(crate) owner: u64,
     module: PhantomData<fn() -> Module>,
@@ -30,7 +30,7 @@ pub trait ModuleHandleIdentity {
     fn composition_owner(&self) -> u64;
 }
 
-impl<Module: MicroserviceModule> Debug for ModuleHandle<Module> {
+impl<Module: MicrodeModule> Debug for ModuleHandle<Module> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ModuleHandle")
@@ -39,7 +39,7 @@ impl<Module: MicroserviceModule> Debug for ModuleHandle<Module> {
     }
 }
 
-impl<Module: MicroserviceModule> ModuleHandle<Module> {
+impl<Module: MicrodeModule> ModuleHandle<Module> {
     pub(crate) fn new(id: ModuleInstanceId, owner: u64) -> Self {
         Self {
             id,
@@ -53,7 +53,7 @@ impl<Module: MicroserviceModule> ModuleHandle<Module> {
     }
 }
 
-impl<Module: MicroserviceModule> ModuleHandleIdentity for ModuleHandle<Module> {
+impl<Module: MicrodeModule> ModuleHandleIdentity for ModuleHandle<Module> {
     fn module_instance_id(&self) -> &ModuleInstanceId {
         &self.id
     }

@@ -1,16 +1,16 @@
 ---
-title: MicroserviceExecutionResult
+title: MicrodeExecutionResult
 ---
 
-# `MicroserviceExecutionResult`
+# `MicrodeExecutionResult`
 
 The outcome returned after a service finishes its lifecycle.
 
 ```rust
-pub struct MicroserviceExecutionResult {
+pub struct MicrodeExecutionResult {
     pub exit_code: i32,
-    pub error: Option<MicroserviceError>,
-    pub errors: Option<Vec<MicroserviceError>>,
+    pub error: Option<MicrodeError>,
+    pub errors: Option<Vec<MicrodeError>>,
 }
 ```
 

@@ -1,7 +1,7 @@
 {
 	"name": "@microde/microservice",
 	"version": "0.5.0",
-	"description": "Composition and lifecycle driver for long-running microservices.",
+	"description": "Composition and lifecycle driver for modular applications.",
 	"license": "MIT",
 	"author": "DLii Technologies",
 	"repository": {

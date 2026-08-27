@@ -5,17 +5,17 @@ use std::time::{Duration, Instant};
 
 use futures::executor::block_on;
 use microde_microservice::{
-    Microservice, MicroserviceContextHandle, MicroserviceError, MicroserviceExecutionResult,
-    MicroserviceModule, MicroserviceState, MicroserviceStopRequest, ModuleFuture, ModuleKind,
+    MicrodeApplication, MicrodeApplicationState, MicrodeContextHandle, MicrodeError,
+    MicrodeExecutionResult, MicrodeModule, MicrodeStopRequest, ModuleFuture, ModuleKind,
 };
 
 struct RequestingModule {
-    context: MicroserviceContextHandle,
+    context: MicrodeContextHandle,
 }
 
 struct CleanupNotifier(Option<mpsc::Sender<()>>);
 
-impl MicroserviceModule for CleanupNotifier {
+impl MicrodeModule for CleanupNotifier {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn cleanup(&mut self) -> ModuleFuture {
         let sender = self.0.take().unwrap();
@@ -35,7 +35,7 @@ impl MicroserviceModule for CleanupNotifier {
 
 struct UnexpectedPanic(mpsc::Sender<()>);
 
-impl MicroserviceModule for UnexpectedPanic {
+impl MicrodeModule for UnexpectedPanic {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         self.0.send(()).unwrap();
@@ -48,12 +48,12 @@ impl MicroserviceModule for UnexpectedPanic {
 }
 
 struct PanickingModule {
-    context: MicroserviceContextHandle,
-    error: Option<MicroserviceError>,
+    context: MicrodeContextHandle,
+    error: Option<MicrodeError>,
     shutdown_marker: PathBuf,
 }
 
-impl MicroserviceModule for PanickingModule {
+impl MicrodeModule for PanickingModule {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn shutdown(&mut self) -> ModuleFuture {
         let marker = self.shutdown_marker.clone();
@@ -71,11 +71,11 @@ impl MicroserviceModule for PanickingModule {
     }
 }
 
-impl MicroserviceModule for RequestingModule {
+impl MicrodeModule for RequestingModule {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn run(&mut self) -> ModuleFuture {
         self.context
-            .request_stop(MicroserviceStopRequest::with_exit_code(6));
+            .request_stop(MicrodeStopRequest::with_exit_code(6));
         Box::pin(async { Ok(()) })
     }
 
@@ -86,62 +86,62 @@ impl MicroserviceModule for RequestingModule {
 
 #[test]
 fn public_construction_supports_module_requested_shutdown() {
-    let mut service = Microservice::default();
+    let mut service = MicrodeApplication::default();
     service
         .install(|context| RequestingModule { context })
         .unwrap();
 
-    let result = block_on(service.run()).unwrap();
+    let result = block_on(service.serve()).unwrap();
 
     assert_eq!(
         result,
-        MicroserviceExecutionResult {
+        MicrodeExecutionResult {
             exit_code: 6,
             error: None,
             errors: None,
         }
     );
-    assert_eq!(service.state(), MicroserviceState::Failed);
+    assert_eq!(service.state(), MicrodeApplicationState::Failed);
 }
 
 #[test]
 fn dropping_the_completion_future_does_not_cancel_the_lifecycle() {
     let (sender, receiver) = mpsc::channel();
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     service.install(|_| CleanupNotifier(Some(sender))).unwrap();
 
-    drop(service.run());
+    drop(service.serve());
 
     receiver.recv_timeout(Duration::from_secs(1)).unwrap();
 
     let deadline = Instant::now() + Duration::from_secs(1);
-    while service.state() != MicroserviceState::Finished && Instant::now() < deadline {
+    while service.state() != MicrodeApplicationState::Finished && Instant::now() < deadline {
         std::thread::yield_now();
     }
 
-    assert_eq!(service.state(), MicroserviceState::Finished);
+    assert_eq!(service.state(), MicrodeApplicationState::Finished);
 }
 
 #[test]
 fn an_unexpected_lifecycle_panic_completes_all_waiters_with_an_error() {
     let (sender, receiver) = mpsc::channel();
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     service.install(|_| UnexpectedPanic(sender)).unwrap();
-    let run = service.run();
+    let run = service.serve();
     receiver.recv_timeout(Duration::from_secs(1)).unwrap();
-    let stop = service.stop(MicroserviceStopRequest::success());
+    let stop = service.stop(MicrodeStopRequest::success());
 
     let (run, stop) = block_on(futures::future::join(run, stop));
 
     assert_eq!(
         run.unwrap_err(),
-        MicroserviceError::new("unexpected module panic")
+        MicrodeError::new("unexpected module panic")
     );
     assert_eq!(
         stop.unwrap_err(),
-        MicroserviceError::new("unexpected module panic")
+        MicrodeError::new("unexpected module panic")
     );
-    assert_eq!(service.state(), MicroserviceState::Failed);
+    assert_eq!(service.state(), MicrodeApplicationState::Failed);
 }
 
 #[test]
@@ -150,15 +150,15 @@ fn production_panic_terminates_the_process() {
     const SHUTDOWN_MARKER: &str = "MICRODE_SHUTDOWN_MARKER";
     if let Some(mode) = std::env::var_os(CHILD_MARKER) {
         let shutdown_marker = PathBuf::from(std::env::var_os(SHUTDOWN_MARKER).unwrap());
-        let mut service = Microservice::new();
+        let mut service = MicrodeApplication::new();
         service
             .install(|context| PanickingModule {
                 context,
-                error: (mode == "with-error").then(|| MicroserviceError::new("fatal child error")),
+                error: (mode == "with-error").then(|| MicrodeError::new("fatal child error")),
                 shutdown_marker,
             })
             .unwrap();
-        let _ = block_on(service.run());
+        let _ = block_on(service.serve());
         unreachable!("panic must terminate before the lifecycle returns");
     }
 
@@ -183,7 +183,7 @@ fn production_panic_terminates_the_process() {
 
 #[test]
 fn runtime_context_rejects_stop_requests_before_execution() {
-    let mut service = Microservice::new();
+    let mut service = MicrodeApplication::new();
     let mut captured_context = None;
     service
         .install(|context| {
@@ -195,9 +195,9 @@ fn runtime_context_rejects_stop_requests_before_execution() {
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         captured_context
             .unwrap()
-            .request_stop(MicroserviceStopRequest::success());
+            .request_stop(MicrodeStopRequest::success());
     }));
 
     assert!(panic.is_err());
-    assert_eq!(service.state(), MicroserviceState::Idle);
+    assert_eq!(service.state(), MicrodeApplicationState::Idle);
 }

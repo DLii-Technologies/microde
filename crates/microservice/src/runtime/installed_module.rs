@@ -1,6 +1,6 @@
 use crate::{
-    MicroserviceModule, ModuleFuture, ModuleInstanceId, ModuleKind, Provider,
-    RelationshipDescriptor, RunContext, SetupContext, module::RuntimeModule,
+    MicrodeModule, ModuleFuture, ModuleInstanceId, ModuleKind, Provider, RelationshipDescriptor,
+    RunContext, SetupContext, module::RuntimeModule,
 };
 use std::any::TypeId;
 
@@ -32,7 +32,7 @@ pub(crate) struct InstalledModule {
 }
 
 impl InstalledModule {
-    pub(crate) fn new<Module: MicroserviceModule + 'static>(
+    pub(crate) fn new<Module: MicrodeModule + 'static>(
         id: ModuleInstanceId,
         module: Module,
     ) -> Self {

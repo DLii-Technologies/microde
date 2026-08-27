@@ -1,10 +1,10 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
-	Microservice,
-	type MicroserviceContext,
-	MicroserviceModule,
-	MicroserviceState,
+	MicrodeApplication,
+	type MicrodeContext,
+	MicrodeModule,
+	MicrodeApplicationState,
 	ModuleKind,
 } from '@microde/microservice';
 
@@ -16,18 +16,68 @@ import { FailingExecutionModule } from './fixtures/failing-execution-module.js';
 import { FailingSynchronousExecutionModule } from './fixtures/failing-synchronous-execution-module.js';
 import { FailingLifecycleModule } from './fixtures/failing-lifecycle-module.js';
 
-describe('Microservice Execution', () => {
+describe('MicrodeApplication Execution', () => {
 	it('runs to successful completion when no modules are installed', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 0,
 		});
 	});
 
+	it('runs an application main after module setup and then shuts down', async () => {
+		const application = new MicrodeApplication();
+		const events: string[] = [];
+		let finishRun!: () => void;
+		const running = new Promise<void>((resolve) => {
+			finishRun = resolve;
+		});
+		application.install(
+			(context) =>
+				new ActiveModule(
+					context,
+					events,
+					undefined,
+					running,
+					() => {},
+					() => finishRun(),
+				),
+		);
+
+		await expect(
+			application.run((context) => {
+				expect(context.requestStop).toEqual(expect.any(Function));
+				events.push('main');
+			}),
+		).resolves.toEqual({ exitCode: 0 });
+
+		expect(events).toEqual([
+			'initialize',
+			'setup',
+			'run',
+			'main',
+			'stop',
+			'teardown',
+			'shutdown',
+			'cleanup',
+		]);
+	});
+
+	it('records an application main failure and still unwinds', async () => {
+		const application = new MicrodeApplication();
+		const failure = new Error('main failed');
+
+		await expect(
+			application.run(() => {
+				throw failure;
+			}),
+		).resolves.toEqual({ exitCode: 1, error: failure });
+		expect(application.state).toBe(MicrodeApplicationState.Failed);
+	});
+
 	it('installs a module through a factory', () => {
-		const microservice = new Microservice();
-		let receivedContext!: MicroserviceContext;
+		const microservice = new MicrodeApplication();
+		let receivedContext!: MicrodeContext;
 
 		const installedModule = microservice.install((instance) => {
 			receivedContext = instance;
@@ -42,54 +92,54 @@ describe('Microservice Execution', () => {
 	});
 
 	it('prevents starts and stops while a module is installing', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		let runAttempt!: Promise<unknown>;
 
 		microservice.install((context) => {
-			expect(microservice.state).toBe(MicroserviceState.Installing);
-			runAttempt = microservice.run();
+			expect(microservice.state).toBe(MicrodeApplicationState.Installing);
+			runAttempt = microservice.serve();
 			expect(() => microservice.stop()).toThrow(
-				'Cannot stop microservice before it has started. Current state: Installing',
+				'Cannot stop application before it has started. Current state: Installing',
 			);
 			return new PassiveModule(context, []);
 		});
 
 		await expect(runAttempt).rejects.toThrow(
-			'Cannot run microservice more than once. Current state: Installing',
+			'Cannot start application more than once. Current state: Installing',
 		);
-		expect(microservice.state).toBe(MicroserviceState.Idle);
-		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+		expect(microservice.state).toBe(MicrodeApplicationState.Idle);
+		await expect(microservice.serve()).resolves.toEqual({ exitCode: 0 });
 	});
 
 	it('returns to idle when a module factory fails', () => {
 		const failure = new Error('installation failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		expect(() =>
 			microservice.install(() => {
 				throw failure;
 			}),
 		).toThrow(failure);
-		expect(microservice.state).toBe(MicroserviceState.Idle);
+		expect(microservice.state).toBe(MicrodeApplicationState.Idle);
 	});
 
 	it('rejects module installation after the microservice has started', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
-		await microservice.run();
+		await microservice.serve();
 
 		expect(() => {
 			microservice.install((instance) => {
 				return new PassiveModule(instance, []);
 			});
 		}).toThrow(
-			'Cannot install module after microservice has started. Current state: Finished',
+			'Cannot install module after application has started. Current state: Finished',
 		);
 	});
 
 	it('rejects concurrent runs without duplicating module lifecycles', async () => {
 		const events: string[] = [];
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => {
 			return new (class extends PassiveModule {
 				override async stop(): Promise<void> {
@@ -98,10 +148,10 @@ describe('Microservice Execution', () => {
 			})(instance, events);
 		});
 
-		const firstRun = microservice.run();
+		const firstRun = microservice.serve();
 
-		await expect(microservice.run()).rejects.toThrow(
-			'Cannot run microservice more than once. Current state: Initialization',
+		await expect(microservice.serve()).rejects.toThrow(
+			'Cannot start application more than once. Current state: Initialization',
 		);
 		await expect(firstRun).resolves.toEqual({ exitCode: 0 });
 		expect(events).toEqual([
@@ -116,36 +166,40 @@ describe('Microservice Execution', () => {
 	});
 
 	it('rejects a repeated run after completion', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
-		await microservice.run();
+		await microservice.serve();
 
-		await expect(microservice.run()).rejects.toThrow(
-			'Cannot run microservice more than once. Current state: Finished',
+		await expect(microservice.serve()).rejects.toThrow(
+			'Cannot start application more than once. Current state: Finished',
 		);
 	});
 
 	it('exposes lifecycle state as read-only', () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		expect(
-			Reflect.set(microservice, 'state', MicroserviceState.Finished),
+			Reflect.set(
+				microservice,
+				'state',
+				MicrodeApplicationState.Finished,
+			),
 		).toBe(false);
-		expect(microservice.state).toBe(MicroserviceState.Idle);
+		expect(microservice.state).toBe(MicrodeApplicationState.Idle);
 	});
 
 	it('runs a passive module and exits cleanly', async () => {
 		const events: string[] = [];
 
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => {
 			return new PassiveModule(instance, events);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 0,
 		});
-		expect(microservice.state).toBe(MicroserviceState.Finished);
+		expect(microservice.state).toBe(MicrodeApplicationState.Finished);
 		expect(events).toEqual([
 			'initialize',
 			'setup',
@@ -159,15 +213,15 @@ describe('Microservice Execution', () => {
 	it('runs an active module and exits cleanly', async () => {
 		const events: string[] = [];
 
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => {
 			return new ActiveModule(instance, events);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 0,
 		});
-		expect(microservice.state).toBe(MicroserviceState.Finished);
+		expect(microservice.state).toBe(MicrodeApplicationState.Finished);
 		expect(events).toEqual([
 			'initialize',
 			'setup',
@@ -181,10 +235,10 @@ describe('Microservice Execution', () => {
 
 	it('classifies active modules by kind rather than class identity', async () => {
 		const events: string[] = [];
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install(
 			(context) =>
-				new (class extends MicroserviceModule {
+				new (class extends MicrodeModule {
 					readonly kind = ModuleKind.Active;
 
 					async run(): Promise<void> {
@@ -197,13 +251,13 @@ describe('Microservice Execution', () => {
 				})(context),
 		);
 
-		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+		await expect(microservice.serve()).resolves.toEqual({ exitCode: 0 });
 		expect(events).toEqual(['run', 'stop']);
 	});
 
 	it('runs modules in installation order and tears them down in reverse order', async () => {
 		const events: string[] = [];
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		const install = (name: string) => {
 			microservice.install((instance) => {
@@ -215,7 +269,7 @@ describe('Microservice Execution', () => {
 		install('first');
 		install('second');
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 0,
 		});
 		expect(events).toEqual([
@@ -242,7 +296,7 @@ describe('Microservice Execution', () => {
 		const firstCompletion = new Promise<void>((resolve) => {
 			releaseFirst = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(instance, events, 'first', firstCompletion);
@@ -257,7 +311,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 0,
 		});
 		expect(events).toEqual([
@@ -281,7 +335,7 @@ describe('Microservice Execution', () => {
 	it('stops initializing modules after the first initialization error', async () => {
 		const events: string[] = [];
 		const failure = new Error('initialization failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingInitializationModule(
@@ -295,7 +349,7 @@ describe('Microservice Execution', () => {
 			return new PassiveModule(instance, events, 'second');
 		});
 
-		const result = await microservice.run();
+		const result = await microservice.serve();
 
 		expect(result.error).toBe(failure);
 		expect(events).not.toContain('second:initialize');
@@ -303,7 +357,7 @@ describe('Microservice Execution', () => {
 
 	it('skips setup, execution, and teardown after an initialization error', async () => {
 		const events: string[] = [];
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingInitializationModule(
@@ -314,7 +368,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await microservice.run();
+		await microservice.serve();
 
 		expect(events).toEqual([
 			'only:initialize',
@@ -325,7 +379,7 @@ describe('Microservice Execution', () => {
 
 	it('shuts down modules that reached initialization and cleans up all installed modules', async () => {
 		const events: string[] = [];
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			events.push('first:create');
@@ -345,7 +399,7 @@ describe('Microservice Execution', () => {
 			return new PassiveModule(instance, events, 'third');
 		});
 
-		await microservice.run();
+		await microservice.serve();
 
 		expect(events).toEqual([
 			'first:create',
@@ -363,7 +417,7 @@ describe('Microservice Execution', () => {
 
 	it('preserves the original initialization error after cleanup completes', async () => {
 		const failure = new Error('original initialization error');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingInitializationModule(
@@ -374,15 +428,15 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
-		expect(microservice.state).toBe(MicroserviceState.Failed);
+		expect(microservice.state).toBe(MicrodeApplicationState.Failed);
 	});
 
 	it('treats an undefined rejection reason as a failure', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingInitializationModule(
@@ -393,17 +447,17 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: undefined,
 		});
-		expect(microservice.state).toBe(MicroserviceState.Failed);
+		expect(microservice.state).toBe(MicrodeApplicationState.Failed);
 	});
 
 	it('stops setup after the first setup error and unwinds reached setup stages', async () => {
 		const events: string[] = [];
 		const failure = new Error('setup failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new PassiveModule(instance, events, 'first');
@@ -415,7 +469,7 @@ describe('Microservice Execution', () => {
 			return new PassiveModule(instance, events, 'third');
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -434,13 +488,13 @@ describe('Microservice Execution', () => {
 			'second:cleanup',
 			'first:cleanup',
 		]);
-		expect(microservice.state).toBe(MicroserviceState.Failed);
+		expect(microservice.state).toBe(MicrodeApplicationState.Failed);
 	});
 
 	it('starts all modules before handling an execution error', async () => {
 		const events: string[] = [];
 		const failure = new Error('execution failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingExecutionModule(
@@ -454,7 +508,7 @@ describe('Microservice Execution', () => {
 			return new PassiveModule(instance, events, 'second');
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -472,13 +526,13 @@ describe('Microservice Execution', () => {
 			'second:cleanup',
 			'first:cleanup',
 		]);
-		expect(microservice.state).toBe(MicroserviceState.Failed);
+		expect(microservice.state).toBe(MicrodeApplicationState.Failed);
 	});
 
 	it('starts all modules before handling a synchronous execution error', async () => {
 		const events: string[] = [];
 		const failure = new Error('synchronous execution failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingSynchronousExecutionModule(
@@ -492,7 +546,7 @@ describe('Microservice Execution', () => {
 			return new PassiveModule(instance, events, 'second');
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -504,7 +558,7 @@ describe('Microservice Execution', () => {
 		const events: string[] = [];
 		const firstFailure = new Error('first teardown failed');
 		const secondFailure = new Error('second teardown failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingLifecycleModule(
@@ -525,7 +579,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: secondFailure,
 			errors: [secondFailure, firstFailure],
@@ -551,7 +605,7 @@ describe('Microservice Execution', () => {
 	it('continues shutdown after a shutdown error', async () => {
 		const events: string[] = [];
 		const failure = new Error('shutdown failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new PassiveModule(instance, events, 'first');
@@ -566,7 +620,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -577,7 +631,7 @@ describe('Microservice Execution', () => {
 	it('continues cleanup after a cleanup error', async () => {
 		const events: string[] = [];
 		const failure = new Error('cleanup failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new PassiveModule(instance, events, 'first');
@@ -592,7 +646,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -603,7 +657,7 @@ describe('Microservice Execution', () => {
 		const events: string[] = [];
 		const primaryFailure = new Error('execution failed');
 		const teardownFailure = new Error('teardown failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new FailingExecutionModule(
@@ -623,7 +677,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: primaryFailure,
 			errors: [primaryFailure, teardownFailure],
@@ -636,7 +690,7 @@ describe('Microservice Execution', () => {
 			releaseActive = resolve;
 		});
 		let executionFinished = false;
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new PassiveModule(instance, [], 'passive');
@@ -645,7 +699,7 @@ describe('Microservice Execution', () => {
 			return new ActiveModule(instance, [], 'active', activeCompletion);
 		});
 
-		const execution = microservice.run().finally(() => {
+		const execution = microservice.serve().finally(() => {
 			executionFinished = true;
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -664,7 +718,7 @@ describe('Microservice Execution', () => {
 		const activeCompletion = new Promise<void>((resolve) => {
 			releaseActive = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -685,7 +739,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -701,7 +755,7 @@ describe('Microservice Execution', () => {
 		const secondCompletion = new Promise<void>((resolve) => {
 			releaseSecond = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -728,7 +782,7 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+		await expect(microservice.serve()).resolves.toEqual({ exitCode: 0 });
 
 		expect(events).toContain('first:stop');
 		expect(events).toContain('second:stop');
@@ -743,7 +797,7 @@ describe('Microservice Execution', () => {
 		const secondCompletion = new Promise<void>((_resolve, reject) => {
 			rejectSecond = reject;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(instance, [], 'first');
@@ -759,17 +813,17 @@ describe('Microservice Execution', () => {
 			);
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
-		expect(microservice.state).toBe(MicroserviceState.Failed);
+		expect(microservice.state).toBe(MicrodeApplicationState.Failed);
 	});
 
 	it('continues stopping active modules after a stop error', async () => {
 		const events: string[] = [];
 		const failure = new Error('stop failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -787,7 +841,7 @@ describe('Microservice Execution', () => {
 			return new ActiveModule(instance, events, 'second');
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -798,7 +852,7 @@ describe('Microservice Execution', () => {
 	it('handles a synchronous active module stop error', async () => {
 		const events: string[] = [];
 		const failure = new Error('synchronous stop failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new (class extends ActiveModule {
@@ -809,7 +863,7 @@ describe('Microservice Execution', () => {
 			})(instance, events, 'active');
 		});
 
-		await expect(microservice.run()).resolves.toEqual({
+		await expect(microservice.serve()).resolves.toEqual({
 			exitCode: 1,
 			error: failure,
 		});
@@ -817,12 +871,12 @@ describe('Microservice Execution', () => {
 	});
 });
 
-describe('Microservice Stopping', () => {
+describe('MicrodeApplication Stopping', () => {
 	it('rejects stopping before the microservice has started', () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		expect(() => microservice.stop()).toThrow(
-			'Cannot stop microservice before it has started. Current state: Idle',
+			'Cannot stop application before it has started. Current state: Idle',
 		);
 	});
 
@@ -832,7 +886,7 @@ describe('Microservice Stopping', () => {
 		const runCompletion = new Promise<void>((resolve) => {
 			releaseRun = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -845,7 +899,7 @@ describe('Microservice Stopping', () => {
 			);
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() => expect(events).toContain('active:run'));
 
 		const firstStop = microservice.stop();
@@ -860,7 +914,7 @@ describe('Microservice Stopping', () => {
 	});
 
 	it('does not deadlock when a module requests a stop', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => {
 			return new (class extends PassiveModule {
 				override async run(): Promise<void> {
@@ -869,25 +923,25 @@ describe('Microservice Stopping', () => {
 			})(instance, [], 'passive');
 		});
 
-		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+		await expect(microservice.serve()).resolves.toEqual({ exitCode: 0 });
 	});
 
 	it('stops with an explicit exit code', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		expect(microservice.stop(42)).toBe(execution);
 		await expect(execution).resolves.toEqual({ exitCode: 42 });
-		expect(microservice.state).toBe(MicroserviceState.Failed);
+		expect(microservice.state).toBe(MicrodeApplicationState.Failed);
 	});
 
 	it('stops with an explicit error', async () => {
 		const failure = new Error('stop requested');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		expect(microservice.stop(failure)).toBe(execution);
 		await expect(execution).resolves.toEqual({
 			exitCode: 1,
@@ -897,10 +951,10 @@ describe('Microservice Stopping', () => {
 
 	it('stops with an explicit exit code and error', async () => {
 		const failure = new Error('restart requested');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		expect(microservice.stop(75, failure)).toBe(execution);
 		await expect(execution).resolves.toEqual({
 			exitCode: 75,
@@ -910,10 +964,10 @@ describe('Microservice Stopping', () => {
 
 	it('uses the values from the first repeated stop request', async () => {
 		const firstFailure = new Error('first request');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		microservice.install((instance) => new ActiveModule(instance, []));
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		const firstStop = microservice.stop(2, firstFailure);
 		const secondStop = microservice.stop(3, new Error('second request'));
 
@@ -931,7 +985,7 @@ describe('Microservice Stopping', () => {
 		const initializationCompletion = new Promise<void>((resolve) => {
 			releaseInitialization = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new (class extends PassiveModule {
@@ -945,7 +999,7 @@ describe('Microservice Stopping', () => {
 			return new PassiveModule(instance, events, 'second');
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() => expect(events).toContain('first:initialize'));
 		microservice.stop();
 		releaseInitialization();
@@ -965,7 +1019,7 @@ describe('Microservice Stopping', () => {
 		const setupCompletion = new Promise<void>((resolve) => {
 			releaseSetup = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new (class extends PassiveModule {
@@ -979,7 +1033,7 @@ describe('Microservice Stopping', () => {
 			return new PassiveModule(instance, events, 'second');
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() => expect(events).toContain('first:setup'));
 		microservice.stop();
 		releaseSetup();
@@ -1011,7 +1065,7 @@ describe('Microservice Stopping', () => {
 		const secondStop = new Promise<void>((resolve) => {
 			releaseSecondStop = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -1035,7 +1089,7 @@ describe('Microservice Stopping', () => {
 			);
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() => expect(events).toContain('second:run'));
 		microservice.stop();
 		await vi.waitFor(() => expect(events).toContain('first:stop'));
@@ -1059,7 +1113,7 @@ describe('Microservice Stopping', () => {
 		const stopCompletion = new Promise<void>((resolve) => {
 			releaseStop = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -1074,7 +1128,7 @@ describe('Microservice Stopping', () => {
 			);
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() => expect(events).toContain('active:run'));
 		microservice.stop();
 		await vi.waitFor(() => expect(events).toContain('active:stop'));
@@ -1096,7 +1150,7 @@ describe('Microservice Stopping', () => {
 		const runCompletion = new Promise<void>((_resolve, reject) => {
 			rejectRun = reject;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -1112,9 +1166,9 @@ describe('Microservice Stopping', () => {
 			);
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() =>
-			expect(microservice.state).toBe(MicroserviceState.Running),
+			expect(microservice.state).toBe(MicrodeApplicationState.Running),
 		);
 		microservice.stop();
 		const result = await execution;
@@ -1129,7 +1183,7 @@ describe('Microservice Stopping', () => {
 	it('keeps multiple stop errors in deterministic reverse module order', async () => {
 		const firstFailure = new Error('first stop failed');
 		const secondFailure = new Error('second stop failed');
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new ActiveModule(
@@ -1156,7 +1210,7 @@ describe('Microservice Stopping', () => {
 			);
 		});
 
-		const result = await microservice.run();
+		const result = await microservice.serve();
 
 		expect(result.error).toBe(secondFailure);
 		expect(result.errors).toEqual([secondFailure, firstFailure]);
@@ -1168,7 +1222,7 @@ describe('Microservice Stopping', () => {
 		const shutdownCompletion = new Promise<void>((resolve) => {
 			releaseShutdown = resolve;
 		});
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 
 		microservice.install((instance) => {
 			return new (class extends PassiveModule {
@@ -1179,9 +1233,9 @@ describe('Microservice Stopping', () => {
 			})(instance, events, 'passive');
 		});
 
-		const execution = microservice.run();
+		const execution = microservice.serve();
 		await vi.waitFor(() =>
-			expect(microservice.state).toBe(MicroserviceState.Shutdown),
+			expect(microservice.state).toBe(MicrodeApplicationState.Shutdown),
 		);
 		expect(microservice.stop()).toBe(execution);
 
@@ -1190,7 +1244,7 @@ describe('Microservice Stopping', () => {
 	});
 });
 
-describe('Microservice Panic', () => {
+describe('MicrodeApplication Panic', () => {
 	it('delegates context panic to the runtime panic behavior', () => {
 		const exitFailure = new Error('process exited');
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -1199,8 +1253,8 @@ describe('Microservice Panic', () => {
 			throw exitFailure;
 		});
 		const failure = new Error('context panic');
-		const microservice = new Microservice();
-		let receivedContext!: MicroserviceContext;
+		const microservice = new MicrodeApplication();
+		let receivedContext!: MicrodeContext;
 		microservice.install((context) => {
 			receivedContext = context;
 			return new PassiveModule(context, []);
@@ -1226,7 +1280,7 @@ describe('Microservice Panic', () => {
 		});
 
 		try {
-			expect(() => new Microservice().panic()).toThrow(exitFailure);
+			expect(() => new MicrodeApplication().panic()).toThrow(exitFailure);
 			expect(error).not.toHaveBeenCalled();
 			expect(trace).toHaveBeenCalledOnce();
 			expect(exit).toHaveBeenCalledWith(1);
@@ -1250,7 +1304,7 @@ describe('Microservice Panic', () => {
 		});
 
 		try {
-			expect(() => new Microservice().panic(failure)).toThrow(
+			expect(() => new MicrodeApplication().panic(failure)).toThrow(
 				exitFailure,
 			);
 			expect(error).toHaveBeenCalledWith(failure);

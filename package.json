@@ -1,6 +1,6 @@
 {
 	"name": "microde",
-	"description": "The Microde framework for building composable microservices.",
+	"description": "The Microde framework for building composable applications.",
 	"license": "MIT",
 	"author": "DLii Technologies",
 	"type": "module",

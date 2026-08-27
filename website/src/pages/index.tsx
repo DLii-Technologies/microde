@@ -20,7 +20,8 @@ export default function Home(): ReactNode {
 					<div className="container">
 						<p className={styles.eyebrow}>Composable by design</p>
 						<Heading as="h1" className={styles.title}>
-							Microservices with a lifecycle you can reason about.
+							MicrodeApplications with a lifecycle you can reason
+							about.
 						</Heading>
 						<p className={styles.subtitle}>{siteConfig.tagline}</p>
 						<div className={styles.actions}>

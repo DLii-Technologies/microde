@@ -12,6 +12,6 @@ pub fn name(&self) -> &str
 pub fn port(&self) -> &Port<T>
 ```
 
-Return its descriptor from `MicroserviceModule::relationships`, bind it with `Microservice::bind`, and resolve it with `SetupContext::use_dependency` or `RunContext::use_relationship`.
+Return its descriptor from `MicrodeModule::relationships`, bind it with `MicrodeApplication::bind`, and resolve it with `SetupContext::use_dependency` or `RunContext::use_relationship`.
 
 Dependencies form a directed acyclic graph. Their providers initialize and set up before consumers, and reverse lifecycle phases run consumers before providers. Dependency cycles are rejected before initialization.

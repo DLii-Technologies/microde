@@ -6,10 +6,10 @@ use super::*;
 
 struct TestContext;
 
-impl MicroserviceContext for TestContext {
-    fn request_stop(&self, _request: MicroserviceStopRequest) {}
+impl MicrodeContext for TestContext {
+    fn request_stop(&self, _request: MicrodeStopRequest) {}
 
-    fn panic(&self, error: Option<MicroserviceError>) -> ! {
+    fn panic(&self, error: Option<MicrodeError>) -> ! {
         panic!("test panic: {error:?}");
     }
 }
@@ -29,7 +29,7 @@ impl UnwindModule {
         Box::pin(async move {
             events.lock().unwrap().push(event);
             if fail {
-                Err(MicroserviceError::new(format!("{phase} failed")))
+                Err(MicrodeError::new(format!("{phase} failed")))
             } else {
                 Ok(())
             }
@@ -37,7 +37,7 @@ impl UnwindModule {
     }
 }
 
-impl MicroserviceModule for UnwindModule {
+impl MicrodeModule for UnwindModule {
     const KIND: ModuleKind = ModuleKind::Passive;
     fn teardown(&mut self) -> ModuleFuture {
         self.phase("teardown", self.fail_teardown)
@@ -60,12 +60,12 @@ impl MicroserviceModule for UnwindModule {
     }
 }
 
-fn service() -> Microservice {
-    Microservice::with_context(Arc::new(TestContext))
+fn service() -> MicrodeApplication {
+    MicrodeApplication::with_context(Arc::new(TestContext))
 }
 
 fn install(
-    service: &mut Microservice,
+    service: &mut MicrodeApplication,
     events: &Arc<Mutex<Vec<String>>>,
     name: &'static str,
     stage: ModuleStage,
@@ -209,7 +209,7 @@ fn unwind_failures_are_collected_without_stopping_later_modules() {
 
     assert_eq!(
         block_on(service.teardown_modules()),
-        vec![MicroserviceError::new("teardown failed")]
+        vec![MicrodeError::new("teardown failed")]
     );
     assert!(
         service
@@ -219,7 +219,7 @@ fn unwind_failures_are_collected_without_stopping_later_modules() {
     );
     assert_eq!(
         block_on(service.shutdown_modules()),
-        vec![MicroserviceError::new("shutdown failed")]
+        vec![MicrodeError::new("shutdown failed")]
     );
     assert!(
         service
@@ -229,7 +229,7 @@ fn unwind_failures_are_collected_without_stopping_later_modules() {
     );
     assert_eq!(
         block_on(service.cleanup_modules()),
-        vec![MicroserviceError::new("cleanup failed")]
+        vec![MicrodeError::new("cleanup failed")]
     );
     assert!(
         service

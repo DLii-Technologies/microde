@@ -1,13 +1,13 @@
 ---
-title: MicroserviceModule
+title: MicrodeModule
 ---
 
-# `MicroserviceModule`
+# `MicrodeModule`
 
 The lifecycle trait implemented by every installed module.
 
 ```rust
-pub trait MicroserviceModule: Send {
+pub trait MicrodeModule: Send {
     const KIND: ModuleKind;
 
     fn relationships(&self) -> Vec<RelationshipDescriptor>;

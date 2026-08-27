@@ -16,13 +16,13 @@ import TabItem from '@theme/TabItem';
 
 ```ts
 import {
-	Microservice,
-	type MicroserviceContext,
-	MicroserviceModule,
+	MicrodeApplication,
+	type MicrodeContext,
+	MicrodeModule,
 	ModuleKind,
 } from '@microde/microservice';
 
-class WorkerModule extends MicroserviceModule {
+class WorkerModule extends MicrodeModule {
 	readonly kind = ModuleKind.Active;
 
 	private finish!: () => void;
@@ -30,7 +30,7 @@ class WorkerModule extends MicroserviceModule {
 		this.finish = resolve;
 	});
 
-	constructor(context: MicroserviceContext) {
+	constructor(context: MicrodeContext) {
 		super(context);
 	}
 
@@ -43,12 +43,12 @@ class WorkerModule extends MicroserviceModule {
 	}
 }
 
-const service = new Microservice();
+const service = new MicrodeApplication();
 service.install((context) => new WorkerModule(context));
 
 process.once('SIGTERM', () => service.stop());
 
-const result = await service.run();
+const result = await service.serve();
 process.exitCode = result.exitCode;
 ```
 
@@ -56,11 +56,11 @@ process.exitCode = result.exitCode;
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::{Microservice, MicroserviceError, MicroserviceModule, ModuleFuture, ModuleKind};
+use microde_microservice::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Worker;
 
-impl MicroserviceModule for Worker {
+impl MicrodeModule for Worker {
     const KIND: ModuleKind = ModuleKind::Active;
 
     fn run(&mut self) -> ModuleFuture {
@@ -73,10 +73,10 @@ impl MicroserviceModule for Worker {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), MicroserviceError> {
-    let mut service = Microservice::new();
+async fn main() -> Result<(), MicrodeError> {
+    let mut service = MicrodeApplication::new();
     service.install(|_| Worker)?;
-    service.run().await?;
+    service.serve().await?;
     Ok(())
 }
 ```

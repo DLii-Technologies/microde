@@ -1,8 +1,5 @@
-import { ModuleKind, type MicroserviceModule } from './microservice-module.js';
-import type {
-	MicroserviceContext,
-	MicroserviceStopRequest,
-} from './microservice-context.js';
+import { ModuleKind, type MicrodeModule } from './microde-module.js';
+import type { MicrodeContext, MicrodeStopRequest } from './microde-context.js';
 import {
 	createModuleHandle,
 	isModuleHandleOwnedBy,
@@ -17,15 +14,15 @@ import {
 	type ResolvedRelationship,
 } from './lifecycle-context.js';
 
-class DefaultMicroserviceContext implements MicroserviceContext {
+class DefaultMicrodeContext implements MicrodeContext {
 	constructor(
 		private readonly requestStopCallback: (
-			request?: MicroserviceStopRequest,
+			request?: MicrodeStopRequest,
 		) => void,
 		private readonly panicCallback: (error?: unknown) => never,
 	) {}
 
-	requestStop(request?: MicroserviceStopRequest): void {
+	requestStop(request?: MicrodeStopRequest): void {
 		this.requestStopCallback(request);
 	}
 
@@ -52,7 +49,7 @@ enum ModuleStage {
 
 interface InstalledModule {
 	readonly id: ModuleInstanceId;
-	readonly module: MicroserviceModule;
+	readonly module: MicrodeModule;
 	stage: ModuleStage;
 }
 
@@ -61,7 +58,7 @@ type ModuleExecutionOutcome =
 	| { readonly status: 'rejected'; readonly error: unknown };
 
 interface ModuleRun {
-	readonly module: MicroserviceModule;
+	readonly module: MicrodeModule;
 	readonly completion: Promise<ModuleExecutionOutcome>;
 }
 
@@ -78,9 +75,12 @@ interface RecordedError {
 	readonly sequence: number;
 }
 
-/** The observable lifecycle state of a {@link Microservice}. */
-export enum MicroserviceState {
-	/** The service accepts module installations and has not started. */
+/** The application-level task invoked after all modules have started. */
+export type MicrodeMain = (context: MicrodeContext) => void | Promise<void>;
+
+/** The observable lifecycle state of a {@link MicrodeApplication}. */
+export enum MicrodeApplicationState {
+	/** The application accepts module installations and has not started. */
 	Idle,
 	/** A module factory is currently being evaluated. */
 	Installing,
@@ -102,8 +102,8 @@ export enum MicroserviceState {
 	Failed,
 }
 
-/** The outcome returned when a microservice finishes its lifecycle. */
-export interface MicroserviceExecutionResult {
+/** The outcome returned when a Microde application finishes its lifecycle. */
+export interface MicrodeExecutionResult {
 	/** The suggested process exit code. */
 	exitCode: number;
 	/** The highest-priority error encountered, when execution failed. */
@@ -115,19 +115,19 @@ export interface MicroserviceExecutionResult {
 /**
  * Composes modules and coordinates their complete lifecycle.
  *
- * A microservice instance can run only once. Install all modules before calling
- * {@link Microservice.run | run}.
+ * A Microde application can execute only once. Install all modules before calling
+ * {@link MicrodeApplication.serve | serve} or {@link MicrodeApplication.run | run}.
  *
  * @example
  * ```ts
- * const service = new Microservice();
+ * const service = new MicrodeApplication();
  * service.install((context) => new DatabaseModule(context));
  *
  * const result = await service.run();
  * process.exitCode = result.exitCode;
  * ```
  */
-export class Microservice {
+export class MicrodeApplication {
 	private readonly modules: InstalledModule[] = [];
 	private readonly moduleIds = new Set<ModuleInstanceId>();
 	private readonly compositionOwner = {};
@@ -137,11 +137,11 @@ export class Microservice {
 	>();
 	private resolutions: ReadonlyMap<RelationshipHandle, ResolvedRelationship> =
 		new Map();
-	private readonly context: MicroserviceContext;
+	private readonly context: MicrodeContext;
 	private readonly stopRequest: Promise<void>;
 	private resolveStopRequest!: () => void;
-	private currentState = MicroserviceState.Idle;
-	private execution?: Promise<MicroserviceExecutionResult>;
+	private currentState = MicrodeApplicationState.Idle;
+	private execution?: Promise<MicrodeExecutionResult>;
 	private stopRequested = false;
 	private stopExitCode?: number;
 	private stopError?: unknown;
@@ -151,14 +151,14 @@ export class Microservice {
 		this.stopRequest = new Promise<void>((resolve) => {
 			this.resolveStopRequest = resolve;
 		});
-		this.context = new DefaultMicroserviceContext(
+		this.context = new DefaultMicrodeContext(
 			(request) => this.requestStop(request),
 			(error) => this.panic(error),
 		);
 	}
 
-	/** The service's current lifecycle state. */
-	public get state(): MicroserviceState {
+	/** The application's current lifecycle state. */
+	public get state(): MicrodeApplicationState {
 		return this.currentState;
 	}
 
@@ -169,21 +169,20 @@ export class Microservice {
 	 * @returns The installed module.
 	 * @throws If called after execution has started, or if another installation is in progress.
 	 */
-	install<Module extends MicroserviceModule>(
+	install<Module extends MicrodeModule>(
 		id: ModuleInstanceId,
-		factory: (context: MicroserviceContext) => Module,
+		factory: (context: MicrodeContext) => Module,
 	): ModuleHandle<Module>;
-	install<Module extends MicroserviceModule>(
-		factory: (context: MicroserviceContext) => Module,
+	install<Module extends MicrodeModule>(
+		factory: (context: MicrodeContext) => Module,
 	): Module;
-	install<Module extends MicroserviceModule>(
-		idOrFactory:
-			ModuleInstanceId | ((context: MicroserviceContext) => Module),
-		maybeFactory?: (context: MicroserviceContext) => Module,
+	install<Module extends MicrodeModule>(
+		idOrFactory: ModuleInstanceId | ((context: MicrodeContext) => Module),
+		maybeFactory?: (context: MicrodeContext) => Module,
 	): Module | ModuleHandle<Module> {
-		if (this.state !== MicroserviceState.Idle) {
+		if (this.state !== MicrodeApplicationState.Idle) {
 			throw new Error(
-				`Cannot install module after microservice has started. Current state: ${MicroserviceState[this.state]}`,
+				`Cannot install module after application has started. Current state: ${MicrodeApplicationState[this.state]}`,
 			);
 		}
 		if (this.compositionSealed) {
@@ -198,7 +197,7 @@ export class Microservice {
 		}
 		const factory = named ? maybeFactory! : idOrFactory;
 
-		this.currentState = MicroserviceState.Installing;
+		this.currentState = MicrodeApplicationState.Installing;
 		try {
 			const module = factory(this.context);
 			this.modules.push({
@@ -211,20 +210,20 @@ export class Microservice {
 				? createModuleHandle<Module>(id, this.compositionOwner)
 				: module;
 		} finally {
-			this.currentState = MicroserviceState.Idle;
+			this.currentState = MicrodeApplicationState.Idle;
 		}
 	}
 
 	/** Binds one declared relationship slot to an exact installed module. */
-	bind<
-		Consumer extends MicroserviceModule,
-		Provider extends MicroserviceModule,
-	>(
+	bind<Consumer extends MicrodeModule, Provider extends MicrodeModule>(
 		consumer: ModuleHandle<Consumer>,
 		slotName: string,
 		target: ModuleHandle<Provider>,
 	): void {
-		if (this.compositionSealed || this.state !== MicroserviceState.Idle) {
+		if (
+			this.compositionSealed ||
+			this.state !== MicrodeApplicationState.Idle
+		) {
 			throw new Error(
 				'Cannot bind relationships after composition is sealed.',
 			);
@@ -266,10 +265,10 @@ export class Microservice {
 		this.bindings.set(slot, { owner: consumer.id, target: target.id });
 	}
 
-	private ensureOwnedHandle(handle: ModuleHandle<MicroserviceModule>): void {
+	private ensureOwnedHandle(handle: ModuleHandle<MicrodeModule>): void {
 		if (!isModuleHandleOwnedBy(handle, this.compositionOwner)) {
 			throw new Error(
-				`Module handle "${handle.id}" belongs to another microservice.`,
+				`Module handle "${handle.id}" belongs to another application.`,
 			);
 		}
 	}
@@ -317,24 +316,37 @@ export class Microservice {
 	}
 
 	/**
-	 * Runs the module lifecycle once.
+	 * Serves the application using module completion and stop requests to control its lifetime.
 	 *
 	 * Lifecycle failures are represented in the resolved result so cleanup can
-	 * finish before the caller receives the outcome. Calling `run` more than once
+	 * finish before the caller receives the outcome. Starting an application more than once
 	 * returns a rejected promise.
 	 */
-	run(): Promise<MicroserviceExecutionResult> {
-		if (this.currentState !== MicroserviceState.Idle) {
+	serve(): Promise<MicrodeExecutionResult> {
+		return this.start();
+	}
+
+	/**
+	 * Runs an application-level task after all modules have started.
+	 *
+	 * Completion or failure of the task begins orderly application shutdown.
+	 */
+	run(main: MicrodeMain): Promise<MicrodeExecutionResult> {
+		return this.start(main);
+	}
+
+	private start(main?: MicrodeMain): Promise<MicrodeExecutionResult> {
+		if (this.currentState !== MicrodeApplicationState.Idle) {
 			return Promise.reject(
 				new Error(
-					`Cannot run microservice more than once. Current state: ${MicroserviceState[this.currentState]}`,
+					`Cannot start application more than once. Current state: ${MicrodeApplicationState[this.currentState]}`,
 				),
 			);
 		}
 		if (this.compositionSealed) {
 			return Promise.reject(
 				new Error(
-					'Cannot run microservice more than once. Composition is sealed.',
+					'Cannot start application more than once. Composition is sealed.',
 				),
 			);
 		}
@@ -345,16 +357,19 @@ export class Microservice {
 			return Promise.reject(error);
 		}
 
-		this.currentState = MicroserviceState.Initialization;
-		let resolveExecution!: (result: MicroserviceExecutionResult) => void;
+		this.currentState = MicrodeApplicationState.Initialization;
+		let resolveExecution!: (result: MicrodeExecutionResult) => void;
 		let rejectExecution!: (error: unknown) => void;
-		this.execution = new Promise<MicroserviceExecutionResult>(
+		this.execution = new Promise<MicrodeExecutionResult>(
 			(resolve, reject) => {
 				resolveExecution = resolve;
 				rejectExecution = reject;
 			},
 		);
-		void this.executeLifecycle().then(resolveExecution, rejectExecution);
+		void this.executeLifecycle(main).then(
+			resolveExecution,
+			rejectExecution,
+		);
 		return this.execution;
 	}
 
@@ -372,20 +387,17 @@ export class Microservice {
 	}
 
 	/** Requests an orderly stop. */
-	stop(): Promise<MicroserviceExecutionResult>;
+	stop(): Promise<MicrodeExecutionResult>;
 	/** Requests an orderly stop with a specific exit code. */
-	stop(exitCode: number): Promise<MicroserviceExecutionResult>;
+	stop(exitCode: number): Promise<MicrodeExecutionResult>;
 	/** Requests an orderly stop caused by an error. */
-	stop(error: unknown): Promise<MicroserviceExecutionResult>;
+	stop(error: unknown): Promise<MicrodeExecutionResult>;
 	/** Requests an orderly stop with both an exit code and error. */
-	stop(
-		exitCode: number,
-		error: unknown,
-	): Promise<MicroserviceExecutionResult>;
+	stop(exitCode: number, error: unknown): Promise<MicrodeExecutionResult>;
 	stop(
 		exitCodeOrError?: number | unknown,
 		error?: unknown,
-	): Promise<MicroserviceExecutionResult> {
+	): Promise<MicrodeExecutionResult> {
 		const request =
 			typeof exitCodeOrError === 'number'
 				? { exitCode: exitCodeOrError, error }
@@ -394,13 +406,13 @@ export class Microservice {
 		return this.execution!;
 	}
 
-	private requestStop(request: MicroserviceStopRequest = {}): void {
+	private requestStop(request: MicrodeStopRequest = {}): void {
 		if (
-			this.currentState === MicroserviceState.Idle ||
-			this.currentState === MicroserviceState.Installing
+			this.currentState === MicrodeApplicationState.Idle ||
+			this.currentState === MicrodeApplicationState.Installing
 		) {
 			throw new Error(
-				`Cannot stop microservice before it has started. Current state: ${MicroserviceState[this.currentState]}`,
+				`Cannot stop application before it has started. Current state: ${MicrodeApplicationState[this.currentState]}`,
 			);
 		}
 
@@ -412,7 +424,9 @@ export class Microservice {
 		}
 	}
 
-	private async executeLifecycle(): Promise<MicroserviceExecutionResult> {
+	private async executeLifecycle(
+		main?: MicrodeMain,
+	): Promise<MicrodeExecutionResult> {
 		const recordedErrors: RecordedError[] = [];
 		let errorSequence = 0;
 		const recordError = (
@@ -430,25 +444,25 @@ export class Microservice {
 			await this.initializeModules();
 
 			if (!this.stopRequested) {
-				this.currentState = MicroserviceState.Setup;
+				this.currentState = MicrodeApplicationState.Setup;
 				await this.setupModules();
 			}
 
 			if (!this.stopRequested) {
-				this.currentState = MicroserviceState.Running;
-				await this.executeModules(recordError);
+				this.currentState = MicrodeApplicationState.Running;
+				await this.executeModules(recordError, main);
 			}
 		} catch (error) {
 			recordError(error);
 		}
 
-		this.currentState = MicroserviceState.TearDown;
+		this.currentState = MicrodeApplicationState.TearDown;
 		await this.teardownModules(recordError);
 
-		this.currentState = MicroserviceState.Shutdown;
+		this.currentState = MicrodeApplicationState.Shutdown;
 		await this.shutdownModules(recordError);
 
-		this.currentState = MicroserviceState.CleanUp;
+		this.currentState = MicrodeApplicationState.CleanUp;
 		await this.cleanupModules(recordError);
 
 		if (this.stopError !== undefined) {
@@ -459,9 +473,9 @@ export class Microservice {
 			recordedErrors.length > 0 ||
 			(this.stopExitCode !== undefined && this.stopExitCode !== 0)
 		) {
-			this.currentState = MicroserviceState.Failed;
+			this.currentState = MicrodeApplicationState.Failed;
 		} else {
-			this.currentState = MicroserviceState.Finished;
+			this.currentState = MicrodeApplicationState.Finished;
 		}
 
 		return this.createExecutionResult(recordedErrors, this.stopExitCode);
@@ -491,6 +505,7 @@ export class Microservice {
 
 	private async executeModules(
 		recordError: (error: unknown, priority?: ErrorPriority) => void,
+		main?: MicrodeMain,
 	): Promise<void> {
 		const activeRuns: ModuleRun[] = [];
 		const passiveRuns: Promise<ModuleExecutionOutcome>[] = [];
@@ -511,10 +526,21 @@ export class Microservice {
 			}
 		}
 
+		const mainCompletion = main
+			? Promise.resolve()
+					.then(() => main(this.context))
+					.then<ModuleExecutionOutcome, ModuleExecutionOutcome>(
+						() => ({ status: 'fulfilled' }),
+						(error: unknown) => {
+							recordError(error, ErrorPriority.Execution);
+							return { status: 'rejected', error };
+						},
+					)
+			: undefined;
+
 		if (activeRuns.length === 0) {
-			await Promise.race([
+			const completionSignals: Promise<unknown>[] = [
 				this.stopRequest,
-				Promise.all(passiveRuns),
 				...passiveRuns.map(
 					(completion) =>
 						new Promise<void>((resolve) => {
@@ -523,7 +549,13 @@ export class Microservice {
 							});
 						}),
 				),
-			]);
+			];
+			if (mainCompletion) {
+				completionSignals.push(mainCompletion);
+			} else {
+				completionSignals.push(Promise.all(passiveRuns));
+			}
+			await Promise.race(completionSignals);
 			await this.stopModules(moduleRuns, recordError);
 			await Promise.all(passiveRuns);
 			return;
@@ -531,6 +563,7 @@ export class Microservice {
 
 		await new Promise<void>((resolve) => {
 			void this.stopRequest.then(() => resolve());
+			if (mainCompletion) void mainCompletion.then(() => resolve());
 			for (const { completion } of activeRuns) {
 				void completion.then(() => resolve());
 			}
@@ -573,14 +606,14 @@ export class Microservice {
 		return stoppedRuns;
 	}
 
-	private stopModule(module: MicroserviceModule): Promise<void> {
+	private stopModule(module: MicrodeModule): Promise<void> {
 		return Promise.resolve().then(() => module.stop());
 	}
 
 	private createExecutionResult(
 		recordedErrors: readonly RecordedError[],
 		exitCode?: number,
-	): MicroserviceExecutionResult {
+	): MicrodeExecutionResult {
 		if (recordedErrors.length === 0) return { exitCode: exitCode ?? 0 };
 
 		const errors = [...recordedErrors]

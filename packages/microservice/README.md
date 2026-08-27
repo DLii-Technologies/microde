@@ -3,13 +3,13 @@
 [![npm version](https://img.shields.io/npm/v/%40microde%2Fmicroservice.svg)](https://www.npmjs.com/package/@microde/microservice)
 [![code coverage](https://codecov.io/gh/DLii-Technologies/microde/graph/badge.svg?component=ts-microservice)](https://codecov.io/gh/DLii-Technologies/microde)
 
-The core driver for Microde service composition and lifecycle management.
+The core driver for Microde application composition and lifecycle management.
 
 ```ts
 import {
-	Microservice,
-	type MicroserviceContext,
-	MicroserviceModule,
+	MicrodeApplication,
+	type MicrodeContext,
+	MicrodeModule,
 	ModuleKind,
 	port,
 	provide,
@@ -17,10 +17,10 @@ import {
 	type SetupContext,
 } from '@microde/microservice';
 
-class Task extends MicroserviceModule {
+class Task extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
 
-	constructor(context: MicroserviceContext) {
+	constructor(context: MicrodeContext) {
 		super(context);
 	}
 
@@ -31,15 +31,24 @@ class Task extends MicroserviceModule {
 	async stop(): Promise<void> {}
 }
 
-const service = new Microservice();
+const service = new MicrodeApplication();
 service.install((context) => new Task(context));
 
-const result = await service.run();
+const result = await service.serve();
 process.exitCode = result.exitCode;
 ```
 
-Modules depend on `MicroserviceContext`, the narrow `requestStop()` and `panic()`
-contract supplied by the `Microservice` through a dedicated context object.
+Use `run(main)` for a finite application task. Microde starts the modules first
+and begins orderly shutdown when the task completes or throws:
+
+```ts
+const result = await service.run(async (context) => {
+	await importRecords();
+});
+```
+
+Modules depend on `MicrodeContext`, the narrow `requestStop()` and `panic()`
+contract supplied by the `MicrodeApplication` through a dedicated context object.
 
 See the documentation in the repository for lifecycle guides and the complete API reference.
 
@@ -47,12 +56,13 @@ See the documentation in the repository for lifecycle guides and the complete AP
 
 Named installation returns an opaque module handle. Modules declare runtime port
 tokens, provider exports, and relationship slots; the service binds each slot to
-one exact handle before `run()` atomically validates and wires the composition.
+one exact handle before `serve()` or `run(main)` atomically validates and wires
+the composition.
 
 ```ts
 const databasePort = port<Database>('database');
 
-class OrdersModule extends MicroserviceModule {
+class OrdersModule extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
 	readonly database = dependency('database', databasePort);
 	readonly relationships = [this.database];

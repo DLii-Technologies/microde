@@ -1,26 +1,26 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
-	Microservice,
-	type MicroserviceContext,
-	MicroserviceModule,
+	MicrodeApplication,
+	type MicrodeContext,
+	MicrodeModule,
 	ModuleKind,
 } from '@microde/microservice';
 
-class NoOpModule extends MicroserviceModule {
+class NoOpModule extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
 }
 
-describe('Microservice Modules', () => {
+describe('MicrodeApplication Modules', () => {
 	it('depends only on the microservice context contract', () => {
-		const context: MicroserviceContext = {
+		const context: MicrodeContext = {
 			requestStop: vi.fn(),
 			panic: vi.fn(() => {
 				throw new Error('panic');
 			}),
 		};
 		const module = new (class extends NoOpModule {
-			usesContext(candidate: MicroserviceContext): boolean {
+			usesContext(candidate: MicrodeContext): boolean {
 				return this.context === candidate;
 			}
 
@@ -38,7 +38,7 @@ describe('Microservice Modules', () => {
 	});
 
 	it('keeps orchestration APIs out of installation contexts', () => {
-		type Factory = Parameters<Microservice['install']>[0];
+		type Factory = Parameters<MicrodeApplication['install']>[0];
 		const factory: Factory = (context) => {
 			// @ts-expect-error Module contexts cannot install modules.
 			context.install;
@@ -55,15 +55,15 @@ describe('Microservice Modules', () => {
 	});
 
 	it('requires modules to declare their kind and defaults run and stop to no-ops', async () => {
-		const microservice = new Microservice();
+		const microservice = new MicrodeApplication();
 		const module = microservice.install(
 			(context) =>
-				new (class extends MicroserviceModule {
+				new (class extends MicrodeModule {
 					readonly kind = ModuleKind.Active;
 				})(context),
 		);
 
-		await expect(microservice.run()).resolves.toEqual({ exitCode: 0 });
+		await expect(microservice.serve()).resolves.toEqual({ exitCode: 0 });
 		expect(module.kind).toBe(ModuleKind.Active);
 	});
 });
