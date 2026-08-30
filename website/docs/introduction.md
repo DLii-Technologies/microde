@@ -7,7 +7,7 @@ description: Learn what Microde provides and how its lifecycle model works.
 
 # Microde
 
-Microde is a TypeScript and Rust framework for composing long-running microservices from small modules with explicit lifecycle boundaries.
+Microde is a TypeScript and Rust framework for composing long-running applications from small modules with explicit lifecycle boundaries.
 
 Instead of concentrating startup, execution, and shutdown logic in one entry point, a Microde service installs modules. Each module declares how it initializes, connects to the service, runs, and releases its resources. The framework coordinates those phases and preserves failures while the service unwinds.
 

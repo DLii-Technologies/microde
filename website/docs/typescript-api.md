@@ -1,9 +1,9 @@
 ---
 title: TypeScript API reference
-description: TypeScript API reference for the @microde/microservice package.
+description: TypeScript API reference for the @microde/application package.
 ---
 
-# `@microde/microservice`
+# `@microde/application`
 
 The API reference is generated from the public TypeScript exports and their TSDoc comments.
 

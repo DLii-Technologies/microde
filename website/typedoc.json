@@ -1,5 +1,5 @@
 {
-	"entryPoints": ["../packages/microservice/src/index.ts"],
+	"entryPoints": ["../packages/application/src/index.ts"],
 	"tsconfig": "./tsconfig.typedoc.json",
 	"out": "./docs/api-reference",
 	"plugin": ["typedoc-plugin-markdown"],

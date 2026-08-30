@@ -1,6 +1,6 @@
 # Microde
 
-[![Microde — Build composable microservices with explicit lifecycles](website/static/img/social-card.svg)](https://microde.dlii.tech)
+[![Microde — Build composable applications with explicit lifecycles](website/static/img/social-card.svg)](https://microde.dlii.tech)
 
 [![Codecov](https://codecov.io/gh/DLii-Technologies/microde/branch/master/graph/badge.svg)](https://codecov.io/gh/DLii-Technologies/microde/branch/master)
 
@@ -11,13 +11,13 @@ Microde is a framework for building software as a collection of composable, inde
 For TypeScript:
 
 ```sh
-npm install @microde/microservice
+npm install @microde/application
 ```
 
 For Rust:
 
 ```sh
-cargo add microde-microservice
+cargo add microde-application
 ```
 
 Both packages expose the same explicit composition and lifecycle model through
@@ -33,7 +33,7 @@ import {
 	type MicrodeContext,
 	MicrodeModule,
 	ModuleKind,
-} from '@microde/microservice';
+} from '@microde/application';
 
 class GreetingModule extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
@@ -89,7 +89,7 @@ equivalent model through `ModuleHandle`, `Port`, `Provider`, `Dependency`, and
 The Rust runtime can be used like this:
 
 ```rust
-use microde_microservice::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
+use microde_application::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Greeting;
 

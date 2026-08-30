@@ -1,13 +1,13 @@
 comment:
-  layout: "header, diff, flags, components"
+    layout: 'header, diff, flags, components'
 
 component_management:
-  individual_components:
-    - component_id: ts-microservice
-      name: TypeScript microservice
-      paths:
-        - packages/microservice/src/**
-    - component_id: rust-microservice
-      name: Rust microservice
-      paths:
-        - crates/microservice/src/**
+    individual_components:
+        - component_id: ts-application
+          name: TypeScript application
+          paths:
+              - packages/application/src/**
+        - component_id: rust-application
+          name: Rust application
+          paths:
+              - crates/application/src/**
