@@ -1,5 +1,11 @@
 # microde-application
 
+## 0.4.0 — 2026-08-30
+
+### Minor changes
+
+- [5250e20](https://github.com/DLii-Technologies/microde/commit/5250e2023cee01e50887267c4aabe25545d801ce) Rename the packages for the generic Microde application runtime. — Thanks @SirDavidLudwig!
+
 ## 0.3.0 — 2026-08-15
 
 ### Minor changes
