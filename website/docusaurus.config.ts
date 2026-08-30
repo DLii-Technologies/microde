@@ -4,7 +4,7 @@ import { themes as prismThemes } from 'prism-react-renderer';
 
 const config: Config = {
 	title: 'Microde',
-	tagline: 'Build composable microservices with explicit lifecycles.',
+	tagline: 'Build composable applications with explicit lifecycles.',
 	favicon: 'img/favicon.svg',
 	future: {
 		v4: true,

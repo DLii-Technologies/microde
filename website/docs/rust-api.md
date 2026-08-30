@@ -1,14 +1,14 @@
 ---
 title: Rust API reference
-description: Rust API reference for the microde-microservice crate.
+description: Rust API reference for the microde-application crate.
 ---
 
-# `microde-microservice`
+# `microde-application`
 
-The Rust runtime is published as the `microde-microservice` crate. Add it with
+The Rust runtime is published as the `microde-application` crate. Add it with
 
 ```bash
-cargo add microde-microservice
+cargo add microde-application
 ```
 
 The API uses the same composition model as the TypeScript runtime while using
@@ -45,7 +45,7 @@ Rust-native traits, owned futures, and `Result`-based errors.
 Modules declare their kind and override lifecycle methods as needed:
 
 ```rust
-use microde_microservice::{MicrodeModule, ModuleFuture, ModuleKind};
+use microde_application::{MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Worker;
 

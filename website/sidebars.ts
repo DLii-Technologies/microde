@@ -24,7 +24,7 @@ const sidebars: SidebarsConfig = {
 					items: [
 						{
 							type: 'category',
-							label: '@microde/microservice',
+							label: '@microde/application',
 							link: { type: 'doc', id: 'typescript-api' },
 							items: [
 								{
@@ -41,7 +41,7 @@ const sidebars: SidebarsConfig = {
 					items: [
 						{
 							type: 'category',
-							label: 'microde-microservice',
+							label: 'microde-application',
 							link: { type: 'doc', id: 'rust-api' },
 							items: [
 								{

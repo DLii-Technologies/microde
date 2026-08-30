@@ -13,7 +13,7 @@ export default function Home(): ReactNode {
 	return (
 		<Layout
 			title={siteConfig.title}
-			description="Microde is a composition-based TypeScript framework for long-running microservices."
+			description="Microde is a composition-based TypeScript framework for long-running applications."
 		>
 			<main>
 				<section className={clsx('hero', styles.hero)}>

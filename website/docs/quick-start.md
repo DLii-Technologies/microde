@@ -20,7 +20,7 @@ import {
 	MicrodeModule,
 	ModuleKind,
 	port,
-} from '@microde/microservice';
+} from '@microde/application';
 
 class GreetingModule extends MicrodeModule {
 	readonly kind = ModuleKind.Passive;
@@ -48,7 +48,7 @@ process.exitCode = result.exitCode;
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
+use microde_application::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Greeting;
 

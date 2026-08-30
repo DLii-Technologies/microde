@@ -1,0 +1,43 @@
+{
+	"name": "@microde/application",
+	"version": "0.5.0",
+	"description": "Composition and lifecycle driver for modular applications.",
+	"license": "MIT",
+	"author": "DLii Technologies",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/DLii-Technologies/microde.git",
+		"directory": "packages/application"
+	},
+	"keywords": [
+		"application",
+		"composition",
+		"lifecycle"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node ../../scripts/copy-license.mjs",
+		"prepack": "pnpm run build",
+		"test": "vitest run",
+		"test:coverage": "vitest run --coverage",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"devDependencies": {
+		"@types/node": "^26.1.2"
+	}
+}

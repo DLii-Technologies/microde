@@ -20,7 +20,7 @@ import {
 	type MicrodeContext,
 	MicrodeModule,
 	ModuleKind,
-} from '@microde/microservice';
+} from '@microde/application';
 
 class WorkerModule extends MicrodeModule {
 	readonly kind = ModuleKind.Active;
@@ -56,7 +56,7 @@ process.exitCode = result.exitCode;
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
+use microde_application::{MicrodeApplication, MicrodeError, MicrodeModule, ModuleFuture, ModuleKind};
 
 struct Worker;
 

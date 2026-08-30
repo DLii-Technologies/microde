@@ -14,20 +14,20 @@ import TabItem from '@theme/TabItem';
 <TabItem value="typescript" label="TypeScript">
 
 ```bash npm2yarn
-npm install @microde/microservice
+npm install @microde/application
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```bash
-cargo add microde-microservice
+cargo add microde-application
 ```
 
 </TabItem>
 </Tabs>
 
-If you prefer to edit dependencies manually, add `microde-microservice` to the
+If you prefer to edit dependencies manually, add `microde-application` to the
 `[dependencies]` table in `Cargo.toml`.
 
 Microde is published as an ECMAScript module and includes TypeScript declarations. Use it from an ESM-compatible Node.js project:
@@ -36,14 +36,14 @@ Microde is published as an ECMAScript module and includes TypeScript declaration
 <TabItem value="typescript" label="TypeScript">
 
 ```ts
-import { MicrodeApplication } from '@microde/microservice';
+import { MicrodeApplication } from '@microde/application';
 ```
 
 </TabItem>
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::MicrodeApplication;
+use microde_application::MicrodeApplication;
 ```
 
 </TabItem>

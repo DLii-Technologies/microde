@@ -4,5 +4,5 @@
 		"noEmit": true,
 		"types": ["node"]
 	},
-	"include": ["../packages/microservice/src/**/*.ts"]
+	"include": ["../packages/application/src/**/*.ts"]
 }

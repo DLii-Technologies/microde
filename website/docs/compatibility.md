@@ -6,7 +6,7 @@ title: Compatibility and limitations
 
 ## Module format
 
-`@microde/microservice` is an ECMAScript module package. Its compiled JavaScript targets ES2022 and its package exports provide ESM imports and TypeScript declarations.
+`@microde/application` is an ECMAScript module package. Its compiled JavaScript targets ES2022 and its package exports provide ESM imports and TypeScript declarations.
 
 ## Runtime
 

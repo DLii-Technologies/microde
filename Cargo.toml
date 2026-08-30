@@ -1,4 +1,3 @@
 [workspace]
-members = ["crates/microservice"]
+members = ["crates/application"]
 resolver = "3"
-

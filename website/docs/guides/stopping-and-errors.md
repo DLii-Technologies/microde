@@ -29,7 +29,7 @@ process.exitCode = result.exitCode;
 <TabItem value="rust" label="Rust">
 
 ```rust
-use microde_microservice::MicrodeStopRequest;
+use microde_application::MicrodeStopRequest;
 
 let execution = service.serve();
 service.stop(MicrodeStopRequest::success());

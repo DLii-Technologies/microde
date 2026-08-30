@@ -18,7 +18,7 @@ Rust. Choose the package or crate used by your application.
       </div>
 		<div className="card__body">
 			<div>
-				<code>@microde/microservice</code> for Node.js applications.
+				<code>@microde/application</code> for Node.js applications.
 			</div>
       </div>
       <div className="card__footer">
@@ -35,7 +35,7 @@ Rust. Choose the package or crate used by your application.
       </div>
 		<div className="card__body">
 			<div>
-				<code>microde-microservice</code> with Rust-native traits, futures,
+				<code>microde-application</code> with Rust-native traits, futures,
 				and errors.
 			</div>
       </div>

@@ -1,0 +1,20 @@
+[package]
+name = "microde-application"
+version = "0.3.0"
+edition = "2024"
+description = "Composition and lifecycle runtime for modular Microde applications."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/DLii-Technologies/microde"
+keywords = ["application", "composition", "lifecycle", "runtime"]
+categories = ["asynchronous"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+event-listener = "5.4.1"
+futures = { version = "0.3.31", features = ["thread-pool"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
